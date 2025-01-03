@@ -67,7 +67,7 @@ post it.
 
 ## Adding new policies, datasets or environments
 
-Look at our implementations for [datasets](./lerobot/common/datasets/), [policies](./lerobot/common/policies/),
+Look at our implementations for [datasets](lecoro/common/datasets/), [policies](lecoro/common/algo/),
 environments ([aloha](https://github.com/huggingface/gym-aloha),
 [xarm](https://github.com/huggingface/gym-xarm),
 [pusht](https://github.com/huggingface/gym-pusht))
@@ -106,8 +106,8 @@ Follow these steps to start contributing:
    [information](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository).
 
    ```bash
-   git clone git@github.com:<your Github handle>/lerobot.git
-   cd lerobot
+   git clone git@github.com:<your Github handle>/lecoro.git
+   cd lecoro
    git remote add upstream https://github.com/huggingface/lerobot.git
    ```
 
@@ -134,7 +134,7 @@ Follow these steps to start contributing:
 
    Set up a development environment with conda or miniconda:
    ```bash
-   conda create -y -n lerobot-dev python=3.10 && conda activate lerobot-dev
+   conda create -y -n lecoro-dev python=3.10 && conda activate lecoro-dev
    ```
 
    To develop on 🤗 LeRobot, you will at least need to install the `dev` and `test` extras dependencies along with the core library:

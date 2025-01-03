@@ -163,7 +163,7 @@ For a quick run, you can try these parameters:
 python benchmark/video/run_video_benchmark.py \
     --output-dir outputs/video_benchmark \
     --repo-ids \
-        lerobot/pusht_image \
+        lecoro/pusht_image \
         aliberts/aloha_mobile_shrimp_image \
     --vcodec libx264 libx265 \
     --pix-fmt yuv444p yuv420p \
@@ -186,7 +186,7 @@ We ran the benchmark with the following parameters:
 python benchmark/video/run_video_benchmark.py \
     --output-dir outputs/video_benchmark \
     --repo-ids \
-        lerobot/pusht_image \
+        lecoro/pusht_image \
         aliberts/aloha_mobile_shrimp_image \
         aliberts/paris_street \
         aliberts/kitchen \
@@ -204,7 +204,7 @@ python benchmark/video/run_video_benchmark.py \
 python benchmark/video/run_video_benchmark.py \
     --output-dir outputs/video_benchmark \
     --repo-ids \
-        lerobot/pusht_image \
+        lecoro/pusht_image \
         aliberts/aloha_mobile_shrimp_image \
         aliberts/paris_street \
         aliberts/kitchen \

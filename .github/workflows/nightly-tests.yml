@@ -17,7 +17,7 @@ jobs:
     runs-on:
       group: aws-general-8-plus
     container:
-      image: huggingface/lerobot-cpu:latest
+      image: huggingface/lecoro-cpu:latest
       options: --shm-size "16gb"
       credentials:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -25,10 +25,10 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: /lerobot
+        working-directory: /lecoro
     steps:
       - name: Tests
-        run: pytest -v --cov=./lerobot --disable-warnings tests
+        run: pytest -v --cov=./lecoro --disable-warnings tests
 
       - name: Tests end-to-end
         run: make test-end-to-end
@@ -44,7 +44,7 @@ jobs:
       CUDA_VISIBLE_DEVICES: "0"
       TEST_TYPE: "single_gpu"
     container:
-      image: huggingface/lerobot-gpu:latest
+      image: huggingface/lecoro-gpu:latest
       options: --gpus all --shm-size "16gb"
       credentials:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -52,13 +52,13 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: /lerobot
+        working-directory: /lecoro
     steps:
       - name: Nvidia-smi
         run: nvidia-smi
 
       - name: Test
-        run: pytest -v --cov=./lerobot --cov-report=xml --disable-warnings tests
+        run: pytest -v --cov=./lecoro --cov-report=xml --disable-warnings tests
       #   TODO(aliberts): Link with HF Codecov account
       # - name: Upload coverage reports to Codecov with GitHub Action
       #   uses: codecov/codecov-action@v4

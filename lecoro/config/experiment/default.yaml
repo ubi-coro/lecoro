@@ -1,0 +1,33 @@
+# @package _global_
+defaults:
+  - /_base_  # structured config from coro.common.config_gen.register_configs
+  - _self_  # non-group defaults in here
+  - /algo: act
+  - /recorder: basic
+  - /observation: aloha_v2
+  - /env: aloha
+  - /training: basic_offline
+
+# top-lvl config applicable to many sub configs
+resume: false
+seed: 42
+dataset_repo_id: lerobot/aloha_static_towel
+root: /home/${oc.env:USER}/lecoro/
+video_backend: pyav
+
+wandb:
+  enable: true
+  # Set to true to disable saving an artifact despite save_checkpoint == True
+  disable_artifact: false
+  project: ubi
+  notes: ""
+
+hydra:
+  run:
+    # Set `dir` to where you would like to save all of the run outputs. If you run another training session
+    # with the same value for `dir` its contents will be overwritten unless you set `resume` to true.
+    dir: ${root}/outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}_${env.name}_${algo.name}_${hydra.job.name}
+  job:
+    name: default
+
+debug: false

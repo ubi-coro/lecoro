@@ -29,11 +29,11 @@ from unittest.mock import patch
 
 import pytest
 
-from lerobot.common.logger import Logger
-from lerobot.common.policies.factory import make_policy
-from lerobot.common.utils.utils import init_hydra_config
-from lerobot.scripts.control_robot import calibrate, record, replay, teleoperate
-from lerobot.scripts.train import make_optimizer_and_scheduler
+from lecoro.common.logger import Logger
+from lecoro.common.algo.factory import make_policy
+from lecoro.common.utils.utils import init_hydra_config
+from lecoro.scripts.control_robot import calibrate, record, replay, teleoperate
+from lecoro.scripts.train import make_optimizer_and_scheduler
 from tests.test_robots import make_robot
 from tests.utils import DEFAULT_CONFIG_PATH, DEVICE, TEST_ROBOT_TYPES, mock_calibration_dir, require_robot
 
@@ -92,7 +92,7 @@ def test_record_without_cameras(tmpdir, request, robot_type, mock):
         mock_calibration_dir(calibration_dir)
         overrides.append(f"calibration_dir={calibration_dir}")
 
-    repo_id = "lerobot/debug"
+    repo_id = "lecoro/debug"
     root = Path(tmpdir) / "data" / repo_id
     single_task = "Do something."
 
@@ -133,7 +133,7 @@ def test_record_and_replay_and_policy(tmpdir, request, robot_type, mock):
     env_name = "koch_real"
     policy_name = "act_koch_real"
 
-    repo_id = "lerobot/debug"
+    repo_id = "lecoro/debug"
     root = tmpdir / "data" / repo_id
     single_task = "Do something."
 
@@ -215,11 +215,11 @@ def test_record_and_replay_and_policy(tmpdir, request, robot_type, mock):
         # before exiting pytest. However, it outputs the following error in the log:
         # Traceback (most recent call last):
         #     File "<string>", line 1, in <module>
-        #     File "/Users/rcadene/miniconda3/envs/lerobot/lib/python3.10/multiprocessing/spawn.py", line 116, in spawn_main
+        #     File "/Users/rcadene/miniconda3/envs/lecoro/lib/python3.10/multiprocessing/spawn.py", line 116, in spawn_main
         #         exitcode = _main(fd, parent_sentinel)
-        #     File "/Users/rcadene/miniconda3/envs/lerobot/lib/python3.10/multiprocessing/spawn.py", line 126, in _main
+        #     File "/Users/rcadene/miniconda3/envs/lecoro/lib/python3.10/multiprocessing/spawn.py", line 126, in _main
         #         self = reduction.pickle.load(from_parent)
-        #     File "/Users/rcadene/miniconda3/envs/lerobot/lib/python3.10/multiprocessing/synchronize.py", line 110, in __setstate__
+        #     File "/Users/rcadene/miniconda3/envs/lecoro/lib/python3.10/multiprocessing/synchronize.py", line 110, in __setstate__
         #         self._semlock = _multiprocessing.SemLock._rebuild(*state)
         # FileNotFoundError: [Errno 2] No such file or directory
         # TODO(rcadene, aliberts): fix FileNotFoundError in multiprocessing
@@ -227,7 +227,7 @@ def test_record_and_replay_and_policy(tmpdir, request, robot_type, mock):
     else:
         num_image_writer_processes = 0
 
-    eval_repo_id = "lerobot/eval_debug"
+    eval_repo_id = "lecoro/eval_debug"
     eval_root = tmpdir / "data" / eval_repo_id
 
     dataset = record(
@@ -271,7 +271,7 @@ def test_resume_record(tmpdir, request, robot_type, mock):
 
     robot = make_robot(robot_type, overrides=overrides, mock=mock)
 
-    repo_id = "lerobot/debug"
+    repo_id = "lecoro/debug"
     root = Path(tmpdir) / "data" / repo_id
     single_task = "Do something."
 
@@ -319,14 +319,14 @@ def test_record_with_event_rerecord_episode(tmpdir, request, robot_type, mock):
         overrides = []
 
     robot = make_robot(robot_type, overrides=overrides, mock=mock)
-    with patch("lerobot.scripts.control_robot.init_keyboard_listener") as mock_listener:
+    with patch("lecoro.scripts.control_robot.init_keyboard_listener") as mock_listener:
         mock_events = {}
         mock_events["exit_early"] = True
         mock_events["rerecord_episode"] = True
         mock_events["stop_recording"] = False
         mock_listener.return_value = (None, mock_events)
 
-        repo_id = "lerobot/debug"
+        repo_id = "lecoro/debug"
         root = Path(tmpdir) / "data" / repo_id
         single_task = "Do something."
 
@@ -367,14 +367,14 @@ def test_record_with_event_exit_early(tmpdir, request, robot_type, mock):
         overrides = []
 
     robot = make_robot(robot_type, overrides=overrides, mock=mock)
-    with patch("lerobot.scripts.control_robot.init_keyboard_listener") as mock_listener:
+    with patch("lecoro.scripts.control_robot.init_keyboard_listener") as mock_listener:
         mock_events = {}
         mock_events["exit_early"] = True
         mock_events["rerecord_episode"] = False
         mock_events["stop_recording"] = False
         mock_listener.return_value = (None, mock_events)
 
-        repo_id = "lerobot/debug"
+        repo_id = "lecoro/debug"
         root = Path(tmpdir) / "data" / repo_id
         single_task = "Do something."
 
@@ -416,14 +416,14 @@ def test_record_with_event_stop_recording(tmpdir, request, robot_type, mock, num
         overrides = []
 
     robot = make_robot(robot_type, overrides=overrides, mock=mock)
-    with patch("lerobot.scripts.control_robot.init_keyboard_listener") as mock_listener:
+    with patch("lecoro.scripts.control_robot.init_keyboard_listener") as mock_listener:
         mock_events = {}
         mock_events["exit_early"] = True
         mock_events["rerecord_episode"] = False
         mock_events["stop_recording"] = True
         mock_listener.return_value = (None, mock_events)
 
-        repo_id = "lerobot/debug"
+        repo_id = "lecoro/debug"
         root = Path(tmpdir) / "data" / repo_id
         single_task = "Do something."
 

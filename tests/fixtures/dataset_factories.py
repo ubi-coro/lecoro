@@ -8,8 +8,8 @@ import PIL.Image
 import pytest
 import torch
 
-from lerobot.common.datasets.lerobot_dataset import CODEBASE_VERSION, LeRobotDataset, LeRobotDatasetMetadata
-from lerobot.common.datasets.utils import (
+from lecoro.common.datasets.lerobot_dataset import CODEBASE_VERSION, LeRobotDataset, LeRobotDatasetMetadata
+from lecoro.common.datasets.utils import (
     DEFAULT_CHUNK_SIZE,
     DEFAULT_FEATURES,
     DEFAULT_PARQUET_PATH,
@@ -310,10 +310,10 @@ def lerobot_dataset_metadata_factory(
         )
         with (
             patch(
-                "lerobot.common.datasets.lerobot_dataset.get_hub_safe_version"
+                "lecoro.common.datasets.lerobot_dataset.get_hub_safe_version"
             ) as mock_get_hub_safe_version_patch,
             patch(
-                "lerobot.common.datasets.lerobot_dataset.snapshot_download"
+                "lecoro.common.datasets.lerobot_dataset.snapshot_download"
             ) as mock_snapshot_download_patch,
         ):
             mock_get_hub_safe_version_patch.side_effect = lambda repo_id, version: version
@@ -383,9 +383,9 @@ def lerobot_dataset_factory(
             local_files_only=kwargs.get("local_files_only", False),
         )
         with (
-            patch("lerobot.common.datasets.lerobot_dataset.LeRobotDatasetMetadata") as mock_metadata_patch,
+            patch("lecoro.common.datasets.lerobot_dataset.LeRobotDatasetMetadata") as mock_metadata_patch,
             patch(
-                "lerobot.common.datasets.lerobot_dataset.snapshot_download"
+                "lecoro.common.datasets.lerobot_dataset.snapshot_download"
             ) as mock_snapshot_download_patch,
         ):
             mock_metadata_patch.return_value = mock_metadata

@@ -1,0 +1,20 @@
+# how to overwrite group defaults (robomimic_resnet18 and refer to named configs, not to a literal values)
+defaults:
+  - override encoder/rgb/backbone: resnet18-pretrained
+  - override encoder/rgb/randomizer/1: color_randomizer
+
+# how to define modalities for different parts of the algorithm
+modalities:
+  obs:
+    low_dim: [ qpos ]
+    rgb: [ cam_low, cam_left_wrist ]
+
+# how to change encoder parameters
+encoder:
+  rgb:
+    randomizer:
+      '1':
+        saturation: 0.1
+
+
+

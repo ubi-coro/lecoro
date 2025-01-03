@@ -17,12 +17,12 @@ from pprint import pprint
 import torch
 from huggingface_hub import HfApi
 
-import lerobot
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
+import lecoro
+from lecoro.common.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
 
 # We ported a number of existing datasets ourselves, use this to see the list:
 print("List of available datasets:")
-pprint(lerobot.available_datasets)
+pprint(lecoro.available_datasets)
 
 # You can also browse through the datasets created/ported by the community on the hub using the hub api:
 hub_api = HfApi()
@@ -33,7 +33,7 @@ pprint(repo_ids)
 # https://huggingface.co/datasets?other=LeRobot
 
 # Let's take this one for this example
-repo_id = "lerobot/aloha_mobile_cabinet"
+repo_id = "lecoro/aloha_mobile_cabinet"
 # We can have a look and fetch its metadata to know more about it:
 ds_meta = LeRobotDatasetMetadata(repo_id)
 

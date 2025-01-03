@@ -58,8 +58,8 @@ Finally, connect both arms to your computer via USB. Note that the USB doesn't p
 
 In the upcoming sections, you'll learn about our classes and functions by running some python code, in an interactive session, or by copy-pasting it in a python file. If this is your first time using the tutorial., we highly recommend going through these steps to get deeper intuition about how things work. Once you're more familiar, you can streamline the process by directly running the teleoperate script (which is detailed further in the tutorial):
 ```bash
-python lerobot/scripts/control_robot.py teleoperate \
-  --robot-path lerobot/configs/robot/koch.yaml \
+python lecoro/scripts/control_robot.py teleoperate \
+  --robot-path lecoro/configs/robot/koch.yaml \
   --robot-overrides '~cameras'  # do not instantiate the cameras
 ```
 
@@ -70,15 +70,15 @@ It will automatically:
 
 ### a. Control your motors with DynamixelMotorsBus
 
-You can use the [`DynamixelMotorsBus`](../lerobot/common/robot_devices/motors/dynamixel.py) to communicate with the motors connected as a chain to the corresponding USB bus. This class leverages the Python [Dynamixel SDK](https://emanual.robotis.com/docs/en/software/dynamixel/dynamixel_sdk/sample_code/python_read_write_protocol_2_0/#python-read-write-protocol-20) to facilitate reading from and writing to the motors.
+You can use the [`DynamixelMotorsBus`](../lecoro/common/robot_devices/motors/dynamixel.py) to communicate with the motors connected as a chain to the corresponding USB bus. This class leverages the Python [Dynamixel SDK](https://emanual.robotis.com/docs/en/software/dynamixel/dynamixel_sdk/sample_code/python_read_write_protocol_2_0/#python-read-write-protocol-20) to facilitate reading from and writing to the motors.
 
 **Instantiate the DynamixelMotorsBus**
 
-To begin, create two instances of the  [`DynamixelMotorsBus`](../lerobot/common/robot_devices/motors/dynamixel.py), one for each arm, using their corresponding USB ports (e.g. `DynamixelMotorsBus(port="/dev/tty.usbmodem575E0031751"`).
+To begin, create two instances of the  [`DynamixelMotorsBus`](../lecoro/common/robot_devices/motors/dynamixel.py), one for each arm, using their corresponding USB ports (e.g. `DynamixelMotorsBus(port="/dev/tty.usbmodem575E0031751"`).
 
 To find the correct ports for each arm, run the utility script twice:
 ```bash
-python lerobot/scripts/find_motors_bus_port.py
+python lecoro/scripts/find_motors_bus_port.py
 ```
 
 Example output when identifying the leader arm's port (e.g., `/dev/tty.usbmodem575E0031751` on Mac, or possibly `/dev/ttyACM0` on Linux):
@@ -116,8 +116,9 @@ sudo chmod 666 /dev/ttyACM1
 Next, you'll need to list the motors for each arm, including their name, index, and model. Initially, each motor is assigned the factory default index `1`. Since each motor requires a unique index to function correctly when connected in a chain on a common bus, you'll need to assign different indices. It's recommended to use an ascending index order, starting from `1` (e.g., `1, 2, 3, 4, 5, 6`). These indices will be saved in the persistent memory of each motor during the first connection.
 
 To assign indices to the motors, run this code in an interactive Python session. Replace the `port` values with the ones you identified earlier:
+
 ```python
-from lerobot.common.robot_devices.motors.dynamixel import DynamixelMotorsBus
+from lecoro.common.robot_devices.motors.dynamixel import DynamixelMotorsBus
 
 leader_port = "/dev/tty.usbmodem575E0031751"
 follower_port = "/dev/tty.usbmodem575E0032081"
@@ -151,13 +152,13 @@ follower_arm = DynamixelMotorsBus(
 
 *Updating the YAML Configuration File*
 
-Next, update the port values in the YAML configuration file for the Koch robot at [`lerobot/configs/robot/koch.yaml`](../lerobot/configs/robot/koch.yaml) with the ports you've identified:
+Next, update the port values in the YAML configuration file for the Koch robot at [`lerobot/configs/robot/koch.yaml`](../lecoro/configs/robot/koch.yaml) with the ports you've identified:
 ```yaml
 [...]
 robot_type: koch
 leader_arms:
   main:
-    _target_: lerobot.common.robot_devices.motors.dynamixel.DynamixelMotorsBus
+    _target_: lecoro.common.robot_devices.motors.dynamixel.DynamixelMotorsBus
     port: /dev/tty.usbmodem575E0031751  # <- Update
     motors:
       # name: (index, model)
@@ -169,7 +170,7 @@ leader_arms:
       gripper: [6, "xl330-m077"]
 follower_arms:
   main:
-    _target_: lerobot.common.robot_devices.motors.dynamixel.DynamixelMotorsBus
+    _target_: lecoro.common.robot_devices.motors.dynamixel.DynamixelMotorsBus
     port: /dev/tty.usbmodem575E0032081  # <- Update
     motors:
       # name: (index, model)
@@ -188,7 +189,7 @@ This configuration file is used to instantiate your robot across all scripts. We
 
 **Connect and Configure your Motors**
 
-Before you can start using your motors, you'll need to configure them to ensure proper communication. When you first connect the motors, the [`DynamixelMotorsBus`](../lerobot/common/robot_devices/motors/dynamixel.py) automatically detects any mismatch between the current motor indices (factory set to `1`) and the specified indices (e.g., `1, 2, 3, 4, 5, 6`). This triggers a configuration procedure that requires you to unplug the power cord and motors, then reconnect each motor sequentially, starting from the one closest to the bus.
+Before you can start using your motors, you'll need to configure them to ensure proper communication. When you first connect the motors, the [`DynamixelMotorsBus`](../lecoro/common/robot_devices/motors/dynamixel.py) automatically detects any mismatch between the current motor indices (factory set to `1`) and the specified indices (e.g., `1, 2, 3, 4, 5, 6`). This triggers a configuration procedure that requires you to unplug the power cord and motors, then reconnect each motor sequentially, starting from the one closest to the bus.
 
 For a visual guide, refer to the [video tutorial of the configuration procedure](https://youtu.be/U78QQ9wCdpY).
 
@@ -267,8 +268,9 @@ array([2003, 1601,   56, 2152, 3101, 2283], dtype=int32)
 Try moving the arms to various positions and observe how the values change.
 
 Now let's try to enable torque in the follower arm by copy pasting this code:
+
 ```python
-from lerobot.common.robot_devices.motors.dynamixel import TorqueMode
+from lecoro.common.robot_devices.motors.dynamixel import TorqueMode
 
 follower_arm.write("Torque_Enable", TorqueMode.ENABLED.value)
 ```
@@ -312,15 +314,16 @@ Alternatively, you can unplug the power cord, which will automatically disable t
 
 **Instantiate the ManipulatorRobot**
 
-Before you can teleoperate your robot, you need to instantiate the  [`ManipulatorRobot`](../lerobot/common/robot_devices/robots/manipulator.py) using the previously defined `leader_arm` and `follower_arm`.
+Before you can teleoperate your robot, you need to instantiate the  [`ManipulatorRobot`](../lecoro/common/robot_devices/robots/manipulator.py) using the previously defined `leader_arm` and `follower_arm`.
 
 For the Koch v1.1 robot, we only have one leader, so we refer to it as `"main"` and define it as `leader_arms={"main": leader_arm}`. We do the same for the follower arm. For other robots (like the Aloha), which may have two pairs of leader and follower arms, you would define them like this: `leader_arms={"left": left_leader_arm, "right": right_leader_arm},`. Same thing for the follower arms.
 
 You also need to provide a path to a calibration directory, such as  `calibration_dir=".cache/calibration/koch"`. More on this in the next section.
 
 Run the following code to instantiate your manipulator robot:
+
 ```python
-from lerobot.common.robot_devices.robots.manipulator import ManipulatorRobot
+from lecoro.common.robot_devices.robots.manipulator import ManipulatorRobot
 
 robot = ManipulatorRobot(
     robot_type="koch",
@@ -338,7 +341,7 @@ For the [Aloha bimanual robot](https://aloha-2.github.io), we would use `robot_t
 
 Next, you'll need to calibrate your Koch robot to ensure that the leader and follower arms have the same position values when they are in the same physical position. This calibration is essential because it allows a neural network trained on one Koch robot to work on another.
 
-When you connect your robot for the first time, the [`ManipulatorRobot`](../lerobot/common/robot_devices/robots/manipulator.py) will detect if the calibration file is missing and trigger the calibration procedure. During this process, you will be guided to move each arm to three different positions.
+When you connect your robot for the first time, the [`ManipulatorRobot`](../lecoro/common/robot_devices/robots/manipulator.py) will detect if the calibration file is missing and trigger the calibration procedure. During this process, you will be guided to move each arm to three different positions.
 
 Here are the positions you'll move the follower arm to:
 
@@ -428,7 +431,7 @@ for _ in tqdm.tqdm(range(seconds*frequency)):
 
 *Using `teleop_step` for Teleoperation*
 
-Alternatively, you can teleoperate the robot using the `teleop_step` method from [`ManipulatorRobot`](../lerobot/common/robot_devices/robots/manipulator.py).
+Alternatively, you can teleoperate the robot using the `teleop_step` method from [`ManipulatorRobot`](../lecoro/common/robot_devices/robots/manipulator.py).
 
 Run this code to teleoperate:
 ```python
@@ -538,13 +541,13 @@ Your iPhone should be detected automatically when running the camera setup scrip
 
 **Instantiate an OpenCVCamera**
 
-The [`OpenCVCamera`](../lerobot/common/robot_devices/cameras/opencv.py) class allows you to efficiently record frames from most cameras using the [`opencv2`](https://docs.opencv.org) library.  For more details on compatibility, see [Video I/O with OpenCV Overview](https://docs.opencv.org/4.x/d0/da7/videoio_overview.html).
+The [`OpenCVCamera`](../lecoro/common/robot_devices/cameras/opencv.py) class allows you to efficiently record frames from most cameras using the [`opencv2`](https://docs.opencv.org) library.  For more details on compatibility, see [Video I/O with OpenCV Overview](https://docs.opencv.org/4.x/d0/da7/videoio_overview.html).
 
-To instantiate an [`OpenCVCamera`](../lerobot/common/robot_devices/cameras/opencv.py), you need a camera index (e.g. `OpenCVCamera(camera_index=0)`). When you only have one camera like a webcam of a laptop, the camera index is usually `0` but it might differ, and the camera index might change if you reboot your computer or re-plug your camera. This behavior depends on your operating system.
+To instantiate an [`OpenCVCamera`](../lecoro/common/robot_devices/cameras/opencv.py), you need a camera index (e.g. `OpenCVCamera(camera_index=0)`). When you only have one camera like a webcam of a laptop, the camera index is usually `0` but it might differ, and the camera index might change if you reboot your computer or re-plug your camera. This behavior depends on your operating system.
 
 To find the camera indices, run the following utility script, which will save a few frames from each detected camera:
 ```bash
-python lerobot/common/robot_devices/cameras/opencv.py \
+python lecoro/common/robot_devices/cameras/opencv.py \
     --images-dir outputs/images_from_opencv_cameras
 ```
 
@@ -578,8 +581,9 @@ camera_01_frame_000047.png
 Note: Some cameras may take a few seconds to warm up, and the first frame might be black or green.
 
 Finally, run this code to instantiate and connectyour camera:
+
 ```python
-from lerobot.common.robot_devices.cameras.opencv import OpenCVCamera
+from lecoro.common.robot_devices.cameras.opencv import OpenCVCamera
 
 camera = OpenCVCamera(camera_index=0)
 camera.connect()
@@ -652,18 +656,18 @@ torch.Size([3, 480, 640])
 255
 ```
 
-Also, update the following lines of the yaml file for Koch robot [`lerobot/configs/robot/koch.yaml`](../lerobot/configs/robot/koch.yaml) with the names and configurations of your cameras:
+Also, update the following lines of the yaml file for Koch robot [`lerobot/configs/robot/koch.yaml`](../lecoro/configs/robot/koch.yaml) with the names and configurations of your cameras:
 ```yaml
 [...]
 cameras:
   laptop:
-    _target_: lerobot.common.robot_devices.cameras.opencv.OpenCVCamera
+    _target_: lecoro.common.robot_devices.cameras.opencv.OpenCVCamera
     camera_index: 0
     fps: 30
     width: 640
     height: 480
   phone:
-    _target_: lerobot.common.robot_devices.cameras.opencv.OpenCVCamera
+    _target_: lecoro.common.robot_devices.cameras.opencv.OpenCVCamera
     camera_index: 1
     fps: 30
     width: 640
@@ -674,12 +678,12 @@ This file is used to instantiate your robot in all our scripts. We will explain 
 
 ### d. Use `koch.yaml` and our `teleoperate` function
 
-Instead of manually running the python code in a terminal window, you can use [`lerobot/scripts/control_robot.py`](../lerobot/scripts/control_robot.py) to instantiate your robot by providing the path to the robot yaml file (e.g. [`lerobot/configs/robot/koch.yaml`](../lerobot/configs/robot/koch.yaml)) and control your robot with various modes as explained next.
+Instead of manually running the python code in a terminal window, you can use [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot.py) to instantiate your robot by providing the path to the robot yaml file (e.g. [`lerobot/configs/robot/koch.yaml`](../lecoro/configs/robot/koch.yaml)) and control your robot with various modes as explained next.
 
 Try running this code to teleoperate your robot (if you dont have a camera, keep reading):
 ```bash
-python lerobot/scripts/control_robot.py teleoperate \
-  --robot-path lerobot/configs/robot/koch.yaml
+python lecoro/scripts/control_robot.py teleoperate \
+  --robot-path lecoro/configs/robot/koch.yaml
 ```
 
 You will see a lot of lines appearing like this one:
@@ -696,8 +700,8 @@ It contains
 
 Note: you can override any entry in the yaml file using `--robot-overrides` and the [hydra.cc](https://hydra.cc/docs/advanced/override_grammar/basic) syntax. If needed, you can override the ports like this:
 ```bash
-python lerobot/scripts/control_robot.py teleoperate \
-  --robot-path lerobot/configs/robot/koch.yaml \
+python lecoro/scripts/control_robot.py teleoperate \
+  --robot-path lecoro/configs/robot/koch.yaml \
   --robot-overrides \
     leader_arms.main.port=/dev/tty.usbmodem575E0031751 \
     follower_arms.main.port=/dev/tty.usbmodem575E0032081
@@ -705,8 +709,8 @@ python lerobot/scripts/control_robot.py teleoperate \
 
 Importantly: If you don't have any camera, you can remove them dynamically with this [hydra.cc](https://hydra.cc/docs/advanced/override_grammar/basic) syntax `'~cameras'`:
 ```bash
-python lerobot/scripts/control_robot.py teleoperate \
-  --robot-path lerobot/configs/robot/koch.yaml \
+python lecoro/scripts/control_robot.py teleoperate \
+  --robot-path lecoro/configs/robot/koch.yaml \
   --robot-overrides \
     '~cameras'
 ```
@@ -718,9 +722,10 @@ We advise to create a new yaml file when the command becomes too long.
 Using what you've learned previously, you can now easily record a dataset of states and actions for one episode. You can use `busy_wait` to control the speed of teleoperation and record at a fixed `fps` (frame per seconds).
 
 Try this code to record 30 seconds at 60 fps:
+
 ```python
 import time
-from lerobot.scripts.control_robot import busy_wait
+from lecoro.scripts.control_robot import busy_wait
 
 record_time_s = 30
 fps = 60
@@ -742,14 +747,14 @@ for _ in range(record_time_s * fps):
 # our optimized format `LeRobotDataset`. More on this next.
 ```
 
-Importantly, many utilities are still missing. For instance, if you have cameras, you will need to save the images on disk to not go out of RAM, and to do so in threads to not slow down communication with your robot. Also, you will need to store your data in a format optimized for training and web sharing like [`LeRobotDataset`](../lerobot/common/datasets/lerobot_dataset.py). More on this in the next section.
+Importantly, many utilities are still missing. For instance, if you have cameras, you will need to save the images on disk to not go out of RAM, and to do so in threads to not slow down communication with your robot. Also, you will need to store your data in a format optimized for training and web sharing like [`LeRobotDataset`](../lecoro/common/datasets/lerobot_dataset.py). More on this in the next section.
 
 ### a. Use `koch.yaml` and the `record` function
 
-You can use the `record` function from [`lerobot/scripts/control_robot.py`](../lerobot/scripts/control_robot.py) to achieve efficient data recording. It encompasses many recording utilities:
+You can use the `record` function from [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot.py) to achieve efficient data recording. It encompasses many recording utilities:
 1. Frames from cameras are saved on disk in threads, and encoded into videos at the end of recording.
 2. Video streams from cameras are displayed in window so that you can verify them.
-3. Data is stored with [`LeRobotDataset`](../lerobot/common/datasets/lerobot_dataset.py) format which is pushed to your Hugging Face page (unless `--push-to-hub 0` is provided).
+3. Data is stored with [`LeRobotDataset`](../lecoro/common/datasets/lerobot_dataset.py) format which is pushed to your Hugging Face page (unless `--push-to-hub 0` is provided).
 4. Checkpoints are done during recording, so if any issue occurs, you can resume recording by re-running the same command again. You can also use `--force-override 1` to start recording from scratch.
 5. Set the flow of data recording using command line arguments:
    - `--warmup-time-s` defines the number of seconds before starting data collection. It allows the robot devices to warmup and synchronize (10 seconds by default).
@@ -775,8 +780,8 @@ If you don't want to push to hub, use `--push-to-hub 0`.
 
 Now run this to record 2 episodes:
 ```bash
-python lerobot/scripts/control_robot.py record \
-  --robot-path lerobot/configs/robot/koch.yaml \
+python lecoro/scripts/control_robot.py record \
+  --robot-path lecoro/configs/robot/koch.yaml \
   --fps 30 \
   --repo-id ${HF_USER}/koch_test \
   --tags tutorial \
@@ -838,7 +843,7 @@ In the coming months, we plan to release a foundational model for robotics. We a
 
 You can visualize your dataset by running:
 ```bash
-python lerobot/scripts/visualize_dataset_html.py \
+python lecoro/scripts/visualize_dataset_html.py \
   --repo-id ${HF_USER}/koch_test
 ```
 
@@ -849,12 +854,12 @@ This will launch a local web server that looks like this:
 
 ### d. Replay episode on your robot with the `replay` function
 
-A useful feature of [`lerobot/scripts/control_robot.py`](../lerobot/scripts/control_robot.py) is the `replay` function, which allows to replay on your robot any episode that you've recorded or episodes from any dataset out there. This function helps you test the repeatability of your robot's actions and assess transferability across robots of the same model.
+A useful feature of [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot.py) is the `replay` function, which allows to replay on your robot any episode that you've recorded or episodes from any dataset out there. This function helps you test the repeatability of your robot's actions and assess transferability across robots of the same model.
 
 To replay the first episode of the dataset you just recorded, run the following command:
 ```bash
-python lerobot/scripts/control_robot.py replay \
-  --robot-path lerobot/configs/robot/koch.yaml \
+python lecoro/scripts/control_robot.py replay \
+  --robot-path lecoro/configs/robot/koch.yaml \
   --fps 30 \
   --repo-id ${HF_USER}/koch_test \
   --episode 0
@@ -866,9 +871,9 @@ Your robot should replicate movements similar to those you recorded. For example
 
 ### a. Use the `train` script
 
-To train a policy to control your robot, use the [`python lerobot/scripts/train.py`](../lerobot/scripts/train.py) script. A few arguments are required. Here is an example command:
+To train a policy to control your robot, use the [`python lerobot/scripts/train.py`](../lecoro/scripts/train.py) script. A few arguments are required. Here is an example command:
 ```bash
-python lerobot/scripts/train.py \
+python lecoro/scripts/train.py \
   dataset_repo_id=${HF_USER}/koch_test \
   policy=act_koch_real \
   env=koch_real \
@@ -880,7 +885,7 @@ python lerobot/scripts/train.py \
 
 Let's explain it:
 1. We provided the dataset as argument with `dataset_repo_id=${HF_USER}/koch_test`.
-2. We provided the policy with `policy=act_koch_real`. This loads configurations from [`lerobot/configs/policy/act_koch_real.yaml`](../lerobot/configs/policy/act_koch_real.yaml). Importantly, this policy uses 2 cameras as input `laptop` and `phone`. If your dataset has different cameras, update the yaml file to account for it in the following parts:
+2. We provided the policy with `policy=act_koch_real`. This loads configurations from [`lerobot/configs/policy/act_koch_real.yaml`](../lecoro/configs/policy/act_koch_real.yaml). Importantly, this policy uses 2 cameras as input `laptop` and `phone`. If your dataset has different cameras, update the yaml file to account for it in the following parts:
 ```yaml
 ...
 override_dataset_stats:
@@ -902,7 +907,7 @@ override_dataset_stats:
     observation.images.phone: mean_std
 ...
 ```
-3. We provided an environment as argument with `env=koch_real`. This loads configurations from [`lerobot/configs/env/koch_real.yaml`](../lerobot/configs/env/koch_real.yaml). It looks like
+3. We provided an environment as argument with `env=koch_real`. This loads configurations from [`lerobot/configs/env/koch_real.yaml`](../lecoro/configs/env/koch_real.yaml). It looks like
 ```yaml
 fps: 30
 env:
@@ -935,11 +940,12 @@ huggingface-cli upload ${HF_USER}/act_koch_test_${CKPT} \
 
 ## 5. Evaluate your policy
 
-Now that you have a policy checkpoint, you can easily control your robot with it using methods from [`ManipulatorRobot`](../lerobot/common/robot_devices/robots/manipulator.py) and the policy.
+Now that you have a policy checkpoint, you can easily control your robot with it using methods from [`ManipulatorRobot`](../lecoro/common/robot_devices/robots/manipulator.py) and the policy.
 
 Try this code for running inference for 60 seconds at 30 fps:
+
 ```python
-from lerobot.common.policies.act.modeling_act import ACTPolicy
+from lecoro.common.algo.act.modeling_act import ACTPolicy
 
 inference_time_s = 60
 fps = 30
@@ -982,10 +988,10 @@ for _ in range(inference_time_s * fps):
 
 Ideally, when controlling your robot with your neural network, you would want to record evaluation episodes and to be able to visualize them later on, or even train on them like in Reinforcement Learning. This pretty much corresponds to recording a new dataset but with a neural network providing the actions instead of teleoperation.
 
-To this end, you can use the `record` function from [`lerobot/scripts/control_robot.py`](../lerobot/scripts/control_robot.py) but with a policy checkpoint as input. For instance, run this command to record 10 evaluation episodes:
+To this end, you can use the `record` function from [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot.py) but with a policy checkpoint as input. For instance, run this command to record 10 evaluation episodes:
 ```bash
-python lerobot/scripts/control_robot.py record \
-  --robot-path lerobot/configs/robot/koch.yaml \
+python lecoro/scripts/control_robot.py record \
+  --robot-path lecoro/configs/robot/koch.yaml \
   --fps 30 \
   --repo-id ${HF_USER}/eval_koch_test \
   --tags tutorial eval \
@@ -1004,7 +1010,7 @@ As you can see, it's almost the same command as previously used to record your t
 
 You can then visualize your evaluation dataset by running the same command as before but with the new inference dataset as argument:
 ```bash
-python lerobot/scripts/visualize_dataset.py \
+python lecoro/scripts/visualize_dataset.py \
   --repo-id ${HF_USER}/eval_koch_test
 ```
 

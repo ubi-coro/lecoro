@@ -1,0 +1,7 @@
+# how to define modalities for different parts of the algorithm
+modalities:
+  obs:
+    low_dim: [ state ]
+    rgb: [ cam_low, cam_left_wrist, cam_high, cam_right_wrist ]
+
+

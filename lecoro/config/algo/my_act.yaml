@@ -1,0 +1,6 @@
+# @package _global_
+defaults:
+  - /algo/act  # which contains default act parameterization and default encoder
+  - override /observation/encoder/rgb/backbone: resnet34
+  - override /algo/optimizer: adam
+  - _self_

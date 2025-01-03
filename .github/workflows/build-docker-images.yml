@@ -41,9 +41,9 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./docker/lerobot-cpu/Dockerfile
+          file: ./docker/lecoro-cpu/Dockerfile
           push: true
-          tags: huggingface/lerobot-cpu
+          tags: huggingface/lecoro-cpu
           build-args: PYTHON_VERSION=${{ env.PYTHON_VERSION }}
 
 
@@ -76,9 +76,9 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./docker/lerobot-gpu/Dockerfile
+          file: ./docker/lecoro-gpu/Dockerfile
           push: true
-          tags: huggingface/lerobot-gpu
+          tags: huggingface/lecoro-gpu
           build-args: PYTHON_VERSION=${{ env.PYTHON_VERSION }}
 
 
@@ -103,7 +103,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
-          file: ./docker/lerobot-gpu-dev/Dockerfile
+          file: ./docker/lecoro-gpu-dev/Dockerfile
           push: true
-          tags: huggingface/lerobot-gpu:dev
+          tags: huggingface/lecoro-gpu:dev
           build-args: PYTHON_VERSION=${{ env.PYTHON_VERSION }}

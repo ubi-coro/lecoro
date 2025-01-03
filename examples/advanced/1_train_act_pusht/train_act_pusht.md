@@ -7,7 +7,7 @@ Let's get started!
 Suppose we want to train ACT for PushT. Well, there are aspects of the ACT configuration that are specific to the ALOHA environments, and these happen to be incompatible with PushT. Therefore, trying to run the following will almost certainly raise an exception of sorts (eg: feature dimension mismatch):
 
 ```bash
-python lerobot/scripts/train.py policy=act env=pusht dataset_repo_id=lerobot/pusht
+python lecoro/scripts/train.py policy=act env=pusht dataset_repo_id=lecoro/pusht
 ```
 
 We need to adapt the parameters of the ACT policy configuration to the PushT environment. The most important ones are the image keys.
@@ -47,14 +47,14 @@ _Side note: technically we could override these via the CLI, but with many chang
 For your convenience, we provide [`act_pusht.yaml`](./act_pusht.yaml) in this directory. It contains the diff above, plus some other (optional) ones that are explained within. Please copy it into `lerobot/configs/policy` with:
 
 ```bash
-cp examples/advanced/1_train_act_pusht/act_pusht.yaml lerobot/configs/policy/act_pusht.yaml
+cp examples/advanced/1_train_act_pusht/act_pusht.yaml lecoro/configs/policy/act_pusht.yaml
 ```
 
 (remember from a [previous tutorial](../4_train_policy_with_script.md) that Hydra will look in the `lerobot/configs` directory). Now try running the following.
 
 <!-- Note to contributor: are you changing this command? Note that it's tested in `Makefile`, so change it there too! -->
 ```bash
-python lerobot/scripts/train.py policy=act_pusht env=pusht
+python lecoro/scripts/train.py policy=act_pusht env=pusht
 ```
 
 Notice that this is much the same as the command that failed at the start of the tutorial, only:

@@ -7,7 +7,7 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 import pytest
 
-from lerobot.common.datasets.utils import EPISODES_PATH, INFO_PATH, STATS_PATH, TASKS_PATH
+from lecoro.common.datasets.utils import EPISODES_PATH, INFO_PATH, STATS_PATH, TASKS_PATH
 
 
 @pytest.fixture(scope="session")

@@ -1,0 +1,14 @@
+# @package _global_
+defaults:
+  - override /algo: bc-small
+  - override /algo/optimizer: adam
+  - override /observation: aloha_v1
+  - override /observation/encoder/rgb/backbone: resnet18-pretrained
+#  - observation/encoder_overwrites={cam_left_wrist:clip_vit_base_patch16}
+
+experiment:
+  name: 'real_aloha_gear_insert'
+  root: '${oc.env:HOME}/data/real_aloha_gear_insert'
+  env_factory:
+    target: coro.config.experiment.factories.aloha_gear_insert.make_environment
+

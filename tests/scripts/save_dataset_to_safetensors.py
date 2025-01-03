@@ -31,10 +31,10 @@ from pathlib import Path
 
 from safetensors.torch import save_file
 
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
+from lecoro.common.datasets.lerobot_dataset import LeRobotDataset
 
 
-def save_dataset_to_safetensors(output_dir, repo_id="lerobot/pusht"):
+def save_dataset_to_safetensors(output_dir, repo_id="lecoro/pusht"):
     repo_dir = Path(output_dir) / repo_id
 
     if repo_dir.exists():
@@ -81,10 +81,10 @@ def save_dataset_to_safetensors(output_dir, repo_id="lerobot/pusht"):
 
 if __name__ == "__main__":
     for dataset in [
-        "lerobot/pusht",
-        "lerobot/aloha_sim_insertion_human",
-        "lerobot/xarm_lift_medium",
-        "lerobot/nyu_franka_play_dataset",
-        "lerobot/cmu_stretch",
+        "lecoro/pusht",
+        "lecoro/aloha_sim_insertion_human",
+        "lecoro/xarm_lift_medium",
+        "lecoro/nyu_franka_play_dataset",
+        "lecoro/cmu_stretch",
     ]:
         save_dataset_to_safetensors("tests/data/save_dataset_to_safetensors", repo_id=dataset)

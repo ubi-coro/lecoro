@@ -22,17 +22,17 @@ rm ~/miniconda3/miniconda.sh
 
 3. Create and activate a fresh conda environment for lerobot
 ```bash
-conda create -y -n lerobot python=3.10 && conda activate lerobot
+conda create -y -n lecoro python=3.10 && conda activate lecoro
 ```
 
 4. Clone LeRobot:
 ```bash
-git clone https://github.com/huggingface/lerobot.git ~/lerobot
+git clone https://github.com/huggingface/lerobot.git ~/lecoro
 ```
 
 5. Install LeRobot with dependencies for the Aloha motors (dynamixel) and cameras (intelrealsense):
 ```bash
-cd ~/lerobot && pip install -e ".[dynamixel, intelrealsense]"
+cd ~/lecoro && pip install -e ".[dynamixel, intelrealsense]"
 ```
 
 For Linux only (not Mac), install extra dependencies for recording datasets:
@@ -51,15 +51,15 @@ Teleoperation consists in manually operating the leader arms to move the followe
 
 By running the following code, you can start your first **SAFE** teleoperation:
 ```bash
-python lerobot/scripts/control_robot.py teleoperate \
-    --robot-path lerobot/configs/robot/aloha.yaml \
+python lecoro/scripts/control_robot.py teleoperate \
+    --robot-path lecoro/configs/robot/aloha.yaml \
     --robot-overrides max_relative_target=5
 ```
 
 By adding `--robot-overrides max_relative_target=5`, we override the default value for `max_relative_target` defined in `lerobot/configs/robot/aloha.yaml`. It is expected to be `5` to limit the magnitude of the movement for more safety, but the teleoperation won't be smooth. When you feel confident, you can disable this limit by adding `--robot-overrides max_relative_target=null` to the command line:
 ```bash
-python lerobot/scripts/control_robot.py teleoperate \
-    --robot-path lerobot/configs/robot/aloha.yaml \
+python lecoro/scripts/control_robot.py teleoperate \
+    --robot-path lecoro/configs/robot/aloha.yaml \
     --robot-overrides max_relative_target=null
 ```
 
@@ -80,8 +80,8 @@ echo $HF_USER
 
 Record 2 episodes and upload your dataset to the hub:
 ```bash
-python lerobot/scripts/control_robot.py record \
-    --robot-path lerobot/configs/robot/aloha.yaml \
+python lecoro/scripts/control_robot.py record \
+    --robot-path lecoro/configs/robot/aloha.yaml \
     --robot-overrides max_relative_target=null \
     --fps 30 \
     --repo-id ${HF_USER}/aloha_test \
@@ -102,7 +102,7 @@ echo ${HF_USER}/aloha_test
 
 If you didn't upload with `--push-to-hub 0`, you can also visualize it locally with:
 ```bash
-python lerobot/scripts/visualize_dataset_html.py \
+python lecoro/scripts/visualize_dataset_html.py \
   --repo-id ${HF_USER}/aloha_test
 ```
 
@@ -113,8 +113,8 @@ Replay consists in automatically replaying the sequence of actions (i.e. goal po
 
 Now try to replay the first episode on your robot:
 ```bash
-python lerobot/scripts/control_robot.py replay \
-    --robot-path lerobot/configs/robot/aloha.yaml \
+python lecoro/scripts/control_robot.py replay \
+    --robot-path lecoro/configs/robot/aloha.yaml \
     --robot-overrides max_relative_target=null \
     --fps 30 \
     --repo-id ${HF_USER}/aloha_test \
@@ -123,9 +123,9 @@ python lerobot/scripts/control_robot.py replay \
 
 ## Train a policy
 
-To train a policy to control your robot, use the [`python lerobot/scripts/train.py`](../lerobot/scripts/train.py) script. A few arguments are required. Here is an example command:
+To train a policy to control your robot, use the [`python lerobot/scripts/train.py`](../lecoro/scripts/train.py) script. A few arguments are required. Here is an example command:
 ```bash
-python lerobot/scripts/train.py \
+python lecoro/scripts/train.py \
   dataset_repo_id=${HF_USER}/aloha_test \
   policy=act_aloha_real \
   env=aloha_real \
@@ -137,8 +137,8 @@ python lerobot/scripts/train.py \
 
 Let's explain it:
 1. We provided the dataset as argument with `dataset_repo_id=${HF_USER}/aloha_test`.
-2. We provided the policy with `policy=act_aloha_real`. This loads configurations from [`lerobot/configs/policy/act_aloha_real.yaml`](../lerobot/configs/policy/act_aloha_real.yaml). Importantly, this policy uses 4 cameras as input `cam_right_wrist`, `cam_left_wrist`, `cam_high`, and `cam_low`.
-3. We provided an environment as argument with `env=aloha_real`. This loads configurations from [`lerobot/configs/env/aloha_real.yaml`](../lerobot/configs/env/aloha_real.yaml). Note: this yaml defines 18 dimensions for the `state_dim` and `action_dim`, corresponding to 18 motors, not 14 motors as used in previous Aloha work. This is because, we include the `shoulder_shadow` and `elbow_shadow` motors for simplicity.
+2. We provided the policy with `policy=act_aloha_real`. This loads configurations from [`lerobot/configs/policy/act_aloha_real.yaml`](../lecoro/configs/policy/act_aloha_real.yaml). Importantly, this policy uses 4 cameras as input `cam_right_wrist`, `cam_left_wrist`, `cam_high`, and `cam_low`.
+3. We provided an environment as argument with `env=aloha_real`. This loads configurations from [`lerobot/configs/env/aloha_real.yaml`](../lecoro/configs/env/aloha_real.yaml). Note: this yaml defines 18 dimensions for the `state_dim` and `action_dim`, corresponding to 18 motors, not 14 motors as used in previous Aloha work. This is because, we include the `shoulder_shadow` and `elbow_shadow` motors for simplicity.
 4. We provided `device=cuda` since we are training on a Nvidia GPU.
 5. We provided `wandb.enable=true` to use [Weights and Biases](https://docs.wandb.ai/quickstart) for visualizing training plots. This is optional but if you use it, make sure you are logged in by running `wandb login`.
 
@@ -146,10 +146,10 @@ Training should take several hours. You will find checkpoints in `outputs/train/
 
 ## Evaluate your policy
 
-You can use the `record` function from [`lerobot/scripts/control_robot.py`](../lerobot/scripts/control_robot.py) but with a policy checkpoint as input. For instance, run this command to record 10 evaluation episodes:
+You can use the `record` function from [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot.py) but with a policy checkpoint as input. For instance, run this command to record 10 evaluation episodes:
 ```bash
-python lerobot/scripts/control_robot.py record \
-  --robot-path lerobot/configs/robot/aloha.yaml \
+python lecoro/scripts/control_robot.py record \
+  --robot-path lecoro/configs/robot/aloha.yaml \
   --robot-overrides max_relative_target=null \
   --fps 30 \
   --repo-id ${HF_USER}/eval_act_aloha_test \

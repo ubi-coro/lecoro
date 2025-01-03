@@ -15,7 +15,7 @@
 # limitations under the License.
 import pytest
 
-from lerobot.scripts.visualize_dataset import visualize_dataset
+from lecoro.scripts.visualize_dataset import visualize_dataset
 
 
 @pytest.mark.skip("TODO: add dummy videos")

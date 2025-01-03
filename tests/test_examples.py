@@ -50,7 +50,7 @@ def test_example_1(tmp_path, lerobot_dataset_factory):
     file_contents = _find_and_replace(
         file_contents,
         [
-            ('repo_id = "lerobot/pusht"', f'repo_id = "{DUMMY_REPO_ID}"'),
+            ('repo_id = "lecoro/pusht"', f'repo_id = "{DUMMY_REPO_ID}"'),
             (
                 "LeRobotDataset(repo_id",
                 f"LeRobotDataset(repo_id, root='{str(tmp_path)}', local_files_only=True",
@@ -98,7 +98,7 @@ def test_examples_basic2_basic3_advanced1():
         file_contents,
         [
             (
-                'pretrained_policy_path = Path(snapshot_download("lerobot/diffusion_pusht"))',
+                'pretrained_policy_path = Path(snapshot_download("lecoro/diffusion_pusht"))',
                 "",
             ),
             (
@@ -122,7 +122,7 @@ def test_examples_basic2_basic3_advanced1():
         file_contents,
         [
             (
-                'pretrained_policy_path = Path(snapshot_download("lerobot/diffusion_pusht"))',
+                'pretrained_policy_path = Path(snapshot_download("lecoro/diffusion_pusht"))',
                 "",
             ),
             (

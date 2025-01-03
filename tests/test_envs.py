@@ -20,10 +20,10 @@ import pytest
 import torch
 from gymnasium.utils.env_checker import check_env
 
-import lerobot
-from lerobot.common.envs.factory import make_env
-from lerobot.common.envs.utils import preprocess_observation
-from lerobot.common.utils.utils import init_hydra_config
+import lecoro
+from lecoro.common.envs.factory import make_env
+from lecoro.common.envs.utils import preprocess_observation
+from lecoro.common.utils.utils import init_hydra_config
 
 from .utils import DEFAULT_CONFIG_PATH, DEVICE, require_env
 
@@ -31,7 +31,7 @@ OBS_TYPES = ["state", "pixels", "pixels_agent_pos"]
 
 
 @pytest.mark.parametrize("obs_type", OBS_TYPES)
-@pytest.mark.parametrize("env_name, env_task", lerobot.env_task_pairs)
+@pytest.mark.parametrize("env_name, env_task", lecoro.env_task_pairs)
 @require_env
 def test_env(env_name, env_task, obs_type):
     if env_name == "aloha" and obs_type == "state":
@@ -44,7 +44,7 @@ def test_env(env_name, env_task, obs_type):
     env.close()
 
 
-@pytest.mark.parametrize("env_name", lerobot.available_envs)
+@pytest.mark.parametrize("env_name", lecoro.available_envs)
 @require_env
 def test_factory(env_name):
     cfg = init_hydra_config(

@@ -7,11 +7,11 @@ import pytest
 import torch
 from datasets import Dataset
 
-from lerobot.common.datasets.push_dataset_to_hub.utils import calculate_episode_data_index
-from lerobot.common.datasets.utils import (
+from lecoro.common.datasets.push_dataset_to_hub.utils import calculate_episode_data_index
+from lecoro.common.datasets.utils import (
     hf_transform_to_torch,
 )
-from lerobot.common.utils.utils import (
+from lecoro.common.utils.utils import (
     get_global_random_state,
     init_hydra_config,
     seeded_context,

@@ -23,17 +23,17 @@ rm ~/miniconda3/miniconda.sh
 
 3. Create and activate a fresh conda environment for lerobot
 ```bash
-conda create -y -n lerobot python=3.10 && conda activate lerobot
+conda create -y -n lecoro python=3.10 && conda activate lecoro
 ```
 
 4. Clone LeRobot:
 ```bash
-git clone https://github.com/huggingface/lerobot.git ~/lerobot
+git clone https://github.com/huggingface/lerobot.git ~/lecoro
 ```
 
 5. Install LeRobot with dependencies for the feetech motors:
 ```bash
-cd ~/lerobot && pip install -e ".[feetech]"
+cd ~/lecoro && pip install -e ".[feetech]"
 ```
 
 For Linux only (not Mac), install extra dependencies for recording datasets:
@@ -50,7 +50,7 @@ Follow steps 1 of the [assembly video](https://www.youtube.com/watch?v=DA91NJOtM
 **Find USB ports associated to your arms**
 To find the correct ports for each arm, run the utility script twice:
 ```bash
-python lerobot/scripts/find_motors_bus_port.py
+python lecoro/scripts/find_motors_bus_port.py
 ```
 
 Example output when identifying the leader arm's port (e.g., `/dev/tty.usbmodem575E0031751` on Mac, or possibly `/dev/ttyACM0` on Linux):
@@ -86,7 +86,7 @@ sudo chmod 666 /dev/ttyACM1
 **Configure your motors**
 Plug your first motor and run this script to set its ID to 1. It will also set its present position to 2048, so expect your motor to rotate:
 ```bash
-python lerobot/scripts/configure_motor.py \
+python lecoro/scripts/configure_motor.py \
   --port /dev/tty.usbmodem58760432961 \
   --brand feetech \
   --model sts3215 \
@@ -98,7 +98,7 @@ Note: These motors are currently limitated. They can take values between 0 and 4
 
 Then unplug your motor and plug the second motor and set its ID to 2.
 ```bash
-python lerobot/scripts/configure_motor.py \
+python lecoro/scripts/configure_motor.py \
   --port /dev/tty.usbmodem58760432961 \
   --brand feetech \
   --model sts3215 \
@@ -134,8 +134,8 @@ You will need to move the follower arm to these positions sequentially:
 
 Make sure both arms are connected and run this script to launch manual calibration:
 ```bash
-python lerobot/scripts/control_robot.py calibrate \
-    --robot-path lerobot/configs/robot/moss.yaml \
+python lecoro/scripts/control_robot.py calibrate \
+    --robot-path lecoro/configs/robot/moss.yaml \
     --robot-overrides '~cameras' --arms main_follower
 ```
 
@@ -148,8 +148,8 @@ Follow step 6 of the [assembly video](https://www.youtube.com/watch?v=DA91NJOtMi
 
 Run this script to launch manual calibration:
 ```bash
-python lerobot/scripts/control_robot.py calibrate \
-    --robot-path lerobot/configs/robot/moss.yaml \
+python lecoro/scripts/control_robot.py calibrate \
+    --robot-path lecoro/configs/robot/moss.yaml \
     --robot-overrides '~cameras' --arms main_leader
 ```
 
@@ -158,8 +158,8 @@ python lerobot/scripts/control_robot.py calibrate \
 **Simple teleop**
 Then you are ready to teleoperate your robot! Run this simple script (it won't connect and display the cameras):
 ```bash
-python lerobot/scripts/control_robot.py teleoperate \
-    --robot-path lerobot/configs/robot/moss.yaml \
+python lecoro/scripts/control_robot.py teleoperate \
+    --robot-path lecoro/configs/robot/moss.yaml \
     --robot-overrides '~cameras' \
     --display-cameras 0
 ```
@@ -168,8 +168,8 @@ python lerobot/scripts/control_robot.py teleoperate \
 **Teleop with displaying cameras**
 Follow [this guide to setup your cameras](https://github.com/huggingface/lerobot/blob/main/examples/7_get_started_with_real_robot.md#c-add-your-cameras-with-opencvcamera). Then you will be able to display the cameras on your computer while you are teleoperating by running the following code. This is useful to prepare your setup before recording your first dataset.
 ```bash
-python lerobot/scripts/control_robot.py teleoperate \
-    --robot-path lerobot/configs/robot/moss.yaml
+python lecoro/scripts/control_robot.py teleoperate \
+    --robot-path lecoro/configs/robot/moss.yaml
 ```
 
 ## Record a dataset
@@ -189,8 +189,8 @@ echo $HF_USER
 
 Record 2 episodes and upload your dataset to the hub:
 ```bash
-python lerobot/scripts/control_robot.py record \
-    --robot-path lerobot/configs/robot/moss.yaml \
+python lecoro/scripts/control_robot.py record \
+    --robot-path lecoro/configs/robot/moss.yaml \
     --fps 30 \
     --repo-id ${HF_USER}/moss_test \
     --tags moss tutorial \
@@ -210,7 +210,7 @@ echo ${HF_USER}/moss_test
 
 If you didn't upload with `--push-to-hub 0`, you can also visualize it locally with:
 ```bash
-python lerobot/scripts/visualize_dataset_html.py \
+python lecoro/scripts/visualize_dataset_html.py \
   --repo-id ${HF_USER}/moss_test
 ```
 
@@ -218,8 +218,8 @@ python lerobot/scripts/visualize_dataset_html.py \
 
 Now try to replay the first episode on your robot:
 ```bash
-python lerobot/scripts/control_robot.py replay \
-    --robot-path lerobot/configs/robot/moss.yaml \
+python lecoro/scripts/control_robot.py replay \
+    --robot-path lecoro/configs/robot/moss.yaml \
     --fps 30 \
     --repo-id ${HF_USER}/moss_test \
     --episode 0
@@ -227,9 +227,9 @@ python lerobot/scripts/control_robot.py replay \
 
 ## Train a policy
 
-To train a policy to control your robot, use the [`python lerobot/scripts/train.py`](../lerobot/scripts/train.py) script. A few arguments are required. Here is an example command:
+To train a policy to control your robot, use the [`python lerobot/scripts/train.py`](../lecoro/scripts/train.py) script. A few arguments are required. Here is an example command:
 ```bash
-python lerobot/scripts/train.py \
+python lecoro/scripts/train.py \
   dataset_repo_id=${HF_USER}/moss_test \
   policy=act_moss_real \
   env=moss_real \
@@ -241,8 +241,8 @@ python lerobot/scripts/train.py \
 
 Let's explain it:
 1. We provided the dataset as argument with `dataset_repo_id=${HF_USER}/moss_test`.
-2. We provided the policy with `policy=act_moss_real`. This loads configurations from [`lerobot/configs/policy/act_moss_real.yaml`](../lerobot/configs/policy/act_moss_real.yaml). Importantly, this policy uses 2 cameras as input `laptop`, `phone`.
-3. We provided an environment as argument with `env=moss_real`. This loads configurations from [`lerobot/configs/env/moss_real.yaml`](../lerobot/configs/env/moss_real.yaml).
+2. We provided the policy with `policy=act_moss_real`. This loads configurations from [`lerobot/configs/policy/act_moss_real.yaml`](../lecoro/configs/policy/act_moss_real.yaml). Importantly, this policy uses 2 cameras as input `laptop`, `phone`.
+3. We provided an environment as argument with `env=moss_real`. This loads configurations from [`lerobot/configs/env/moss_real.yaml`](../lecoro/configs/env/moss_real.yaml).
 4. We provided `device=cuda` since we are training on a Nvidia GPU, but you can also use `device=mps` if you are using a Mac with Apple silicon, or `device=cpu` otherwise.
 5. We provided `wandb.enable=true` to use [Weights and Biases](https://docs.wandb.ai/quickstart) for visualizing training plots. This is optional but if you use it, make sure you are logged in by running `wandb login`.
 
@@ -250,10 +250,10 @@ Training should take several hours. You will find checkpoints in `outputs/train/
 
 ## Evaluate your policy
 
-You can use the `record` function from [`lerobot/scripts/control_robot.py`](../lerobot/scripts/control_robot.py) but with a policy checkpoint as input. For instance, run this command to record 10 evaluation episodes:
+You can use the `record` function from [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot.py) but with a policy checkpoint as input. For instance, run this command to record 10 evaluation episodes:
 ```bash
-python lerobot/scripts/control_robot.py record \
-  --robot-path lerobot/configs/robot/moss.yaml \
+python lecoro/scripts/control_robot.py record \
+  --robot-path lecoro/configs/robot/moss.yaml \
   --fps 30 \
   --repo-id ${HF_USER}/eval_act_moss_test \
   --tags moss tutorial eval \

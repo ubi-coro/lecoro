@@ -21,13 +21,13 @@ from safetensors.torch import load_file
 from torchvision.transforms import v2
 from torchvision.transforms.v2 import functional as F  # noqa: N812
 
-from lerobot.common.datasets.transforms import RandomSubsetApply, SharpnessJitter, get_image_transforms
-from lerobot.common.utils.utils import init_hydra_config, seeded_context
-from lerobot.scripts.visualize_image_transforms import visualize_transforms
+from lecoro.common.datasets.transforms import RandomSubsetApply, SharpnessJitter, get_image_transforms
+from lecoro.common.utils.utils import init_hydra_config, seeded_context
+from lecoro.scripts.visualize_image_transforms import visualize_transforms
 from tests.utils import DEFAULT_CONFIG_PATH, require_x86_64_kernel
 
 ARTIFACT_DIR = Path("tests/data/save_image_transforms_to_safetensors")
-DATASET_REPO_ID = "lerobot/aloha_mobile_shrimp"
+DATASET_REPO_ID = "lecoro/aloha_mobile_shrimp"
 
 
 @pytest.fixture
@@ -264,7 +264,7 @@ def test_sharpness_jitter_invalid_range_max_smaller():
 @pytest.mark.parametrize(
     "repo_id, n_examples",
     [
-        ("lerobot/aloha_sim_transfer_cube_human", 3),
+        ("lecoro/aloha_sim_transfer_cube_human", 3),
     ],
 )
 def test_visualize_image_transforms(repo_id, n_examples):

@@ -15,10 +15,10 @@ import numpy as np
 import pytest
 import torch
 
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.common.datasets.push_dataset_to_hub.utils import save_images_concurrently
-from lerobot.common.datasets.video_utils import encode_video_frames
-from lerobot.scripts.push_dataset_to_hub import push_dataset_to_hub
+from lecoro.common.datasets.lerobot_dataset import LeRobotDataset
+from lecoro.common.datasets.push_dataset_to_hub.utils import save_images_concurrently
+from lecoro.common.datasets.video_utils import encode_video_frames
+from lecoro.scripts.push_dataset_to_hub import push_dataset_to_hub
 from tests.utils import require_package_arg
 
 
@@ -254,11 +254,11 @@ def test_push_dataset_to_hub_out_dir_force_override_false(tmpdir):
 @pytest.mark.parametrize(
     "required_packages, raw_format, repo_id, make_test_data",
     [
-        (["gym_pusht"], "pusht_zarr", "lerobot/pusht", False),
-        (["gym_pusht"], "pusht_zarr", "lerobot/pusht", True),
-        (None, "xarm_pkl", "lerobot/xarm_lift_medium", False),
-        (None, "aloha_hdf5", "lerobot/aloha_sim_insertion_scripted", False),
-        (["imagecodecs"], "umi_zarr", "lerobot/umi_cup_in_the_wild", False),
+        (["gym_pusht"], "pusht_zarr", "lecoro/pusht", False),
+        (["gym_pusht"], "pusht_zarr", "lecoro/pusht", True),
+        (None, "xarm_pkl", "lecoro/xarm_lift_medium", False),
+        (None, "aloha_hdf5", "lecoro/aloha_sim_insertion_scripted", False),
+        (["imagecodecs"], "umi_zarr", "lecoro/umi_cup_in_the_wild", False),
         (None, "dora_parquet", "cadene/wrist_gripper", False),
     ],
 )
@@ -322,10 +322,10 @@ def test_push_dataset_to_hub_format(required_packages, tmpdir, raw_format, repo_
     "raw_format, repo_id",
     [
         # TODO(rcadene): add raw dataset test artifacts
-        ("pusht_zarr", "lerobot/pusht"),
-        ("xarm_pkl", "lerobot/xarm_lift_medium"),
-        ("aloha_hdf5", "lerobot/aloha_sim_insertion_scripted"),
-        ("umi_zarr", "lerobot/umi_cup_in_the_wild"),
+        ("pusht_zarr", "lecoro/pusht"),
+        ("xarm_pkl", "lecoro/xarm_lift_medium"),
+        ("aloha_hdf5", "lecoro/aloha_sim_insertion_scripted"),
+        ("umi_zarr", "lecoro/umi_cup_in_the_wild"),
         ("dora_parquet", "cadene/wrist_gripper"),
     ],
 )

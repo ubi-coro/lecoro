@@ -8,9 +8,9 @@ from pathlib import Path
 
 import torch
 
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.common.policies.diffusion.configuration_diffusion import DiffusionConfig
-from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
+from lecoro.common.datasets.lerobot_dataset import LeRobotDataset
+from lecoro.common.algo.diffusion.configuration_diffusion import DiffusionConfig
+from lecoro.common.algo.diffusion.modeling_diffusion import DiffusionPolicy
 
 # Create a directory to store the training checkpoint.
 output_directory = Path("outputs/train/example_pusht_diffusion")
@@ -33,7 +33,7 @@ delta_timestamps = {
     # used to supervise the policy.
     "action": [-0.1, 0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4],
 }
-dataset = LeRobotDataset("lerobot/pusht", delta_timestamps=delta_timestamps)
+dataset = LeRobotDataset("lecoro/pusht", delta_timestamps=delta_timestamps)
 
 # Set up the the policy.
 # Policies are initialized with a configuration class, in this case `DiffusionConfig`.

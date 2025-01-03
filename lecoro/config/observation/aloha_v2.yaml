@@ -1,0 +1,8 @@
+modalities:
+  obs:
+    low_dim: [ qpos ]
+    rgb: [ cam_low, cam_left_wrist ]
+    depth: [ depth_low, depth_left_wrist ]
+
+
+

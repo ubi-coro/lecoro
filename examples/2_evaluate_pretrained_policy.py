@@ -12,14 +12,14 @@ import numpy
 import torch
 from huggingface_hub import snapshot_download
 
-from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
+from lecoro.common.algo.diffusion.modeling_diffusion import DiffusionPolicy
 
 # Create a directory to store the video of the evaluation
 output_directory = Path("outputs/eval/example_pusht_diffusion")
 output_directory.mkdir(parents=True, exist_ok=True)
 
 # Download the diffusion policy for pusht environment
-pretrained_policy_path = Path(snapshot_download("lerobot/diffusion_pusht"))
+pretrained_policy_path = Path(snapshot_download("lecoro/diffusion_pusht"))
 # OR uncomment the following to evaluate a policy from the local outputs/train folder.
 # pretrained_policy_path = Path("outputs/train/example_pusht_diffusion")
 

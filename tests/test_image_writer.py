@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from lerobot.common.datasets.image_writer import (
+from lecoro.common.datasets.image_writer import (
     AsyncImageWriter,
     image_array_to_image,
     safe_stop_image_writer,

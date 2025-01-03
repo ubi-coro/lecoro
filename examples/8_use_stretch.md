@@ -35,17 +35,17 @@ fi
 
 4. Create and activate a fresh conda environment for lerobot
 ```bash
-conda create -y -n lerobot python=3.10 && conda activate lerobot
+conda create -y -n lecoro python=3.10 && conda activate lecoro
 ```
 
 5. Clone LeRobot:
 ```bash
-git clone https://github.com/huggingface/lerobot.git ~/lerobot
+git clone https://github.com/huggingface/lerobot.git ~/lecoro
 ```
 
 6. Install LeRobot with stretch dependencies:
 ```bash
-cd ~/lerobot && pip install -e ".[stretch]"
+cd ~/lecoro && pip install -e ".[stretch]"
 ```
 
 > **Note:** If you get this message, you can ignore it: `ERROR: pip's dependency resolver does not currently take into account all the packages that are installed.`
@@ -92,8 +92,8 @@ Serial Number = stretch-se3-3054
 **Calibrate (Optional)**
 Before operating Stretch, you need to [home](https://docs.hello-robot.com/0.3/getting_started/stretch_hardware_overview/#homing) it first. Be mindful about giving Stretch some space as this procedure will move the robot's arm and gripper. Now run this command:
 ```bash
-python lerobot/scripts/control_robot.py calibrate \
-    --robot-path lerobot/configs/robot/stretch.yaml
+python lecoro/scripts/control_robot.py calibrate \
+    --robot-path lecoro/configs/robot/stretch.yaml
 ```
 This is equivalent to running `stretch_robot_home.py`
 
@@ -104,8 +104,8 @@ Before trying teleoperation, you need activate the gamepad controller by pressin
 
 Now try out teleoperation (see above documentation to learn about the gamepad controls):
 ```bash
-python lerobot/scripts/control_robot.py teleoperate \
-    --robot-path lerobot/configs/robot/stretch.yaml
+python lecoro/scripts/control_robot.py teleoperate \
+    --robot-path lecoro/configs/robot/stretch.yaml
 ```
 This is essentially the same as running `stretch_gamepad_teleop.py`
 
@@ -125,8 +125,8 @@ echo $HF_USER
 
 Record one episode:
 ```bash
-python lerobot/scripts/control_robot.py record \
-    --robot-path lerobot/configs/robot/stretch.yaml \
+python lecoro/scripts/control_robot.py record \
+    --robot-path lecoro/configs/robot/stretch.yaml \
     --fps 20 \
     --repo-id ${HF_USER}/stretch_test \
     --tags stretch tutorial \
@@ -142,8 +142,8 @@ python lerobot/scripts/control_robot.py record \
 **Replay an episode**
 Now try to replay this episode (make sure the robot's initial position is the same):
 ```bash
-python lerobot/scripts/control_robot.py replay \
-    --robot-path lerobot/configs/robot/stretch.yaml \
+python lecoro/scripts/control_robot.py replay \
+    --robot-path lecoro/configs/robot/stretch.yaml \
     --fps 20 \
     --repo-id ${HF_USER}/stretch_test \
     --episode 0

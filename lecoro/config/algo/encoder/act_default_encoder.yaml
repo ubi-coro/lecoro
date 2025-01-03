@@ -1,0 +1,7 @@
+# @package _global_
+defaults:
+  - override /observation/encoder/rgb/backbone: vit_small_patch16
+  - override /observation/encoder/rgb/projection: spatial_softmax
+  - override /observation/encoder/rgb/randomizer/1: crop_randomizer
+  - override /observation/encoder/rgb/randomizer/2: color_randomizer
+  - override /observation/encoder/rgb/randomizer/1: crop_randomizer

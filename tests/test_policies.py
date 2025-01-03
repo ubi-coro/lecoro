@@ -23,21 +23,21 @@ import torch
 from huggingface_hub import PyTorchModelHubMixin
 from safetensors.torch import load_file
 
-from lerobot import available_policies
-from lerobot.common.datasets.factory import make_dataset
-from lerobot.common.datasets.utils import cycle
-from lerobot.common.envs.factory import make_env
-from lerobot.common.envs.utils import preprocess_observation
-from lerobot.common.policies.act.modeling_act import ACTTemporalEnsembler
-from lerobot.common.policies.factory import (
+from lecoro import available_policies
+from lecoro.common.datasets.factory import make_dataset
+from lecoro.common.datasets.utils import cycle
+from lecoro.common.envs.factory import make_env
+from lecoro.common.envs.utils import preprocess_observation
+from lecoro.common.algo.act.modeling_act import ACTTemporalEnsembler
+from lecoro.common.algo.factory import (
     _policy_cfg_from_hydra_cfg,
     get_policy_and_config_classes,
     make_policy,
 )
-from lerobot.common.policies.normalize import Normalize, Unnormalize
-from lerobot.common.policies.policy_protocol import Policy
-from lerobot.common.utils.utils import init_hydra_config, seeded_context
-from lerobot.scripts.train import make_optimizer_and_scheduler
+from lecoro.common.algo.normalize import Normalize, Unnormalize
+from lecoro.common.algo.algo_protocol import Policy
+from lecoro.common.utils.utils import init_hydra_config, seeded_context
+from lecoro.scripts.train import make_optimizer_and_scheduler
 from tests.scripts.save_policy_to_safetensors import get_policy_stats
 from tests.utils import DEFAULT_CONFIG_PATH, DEVICE, require_cpu, require_env, require_x86_64_kernel
 
@@ -54,33 +54,33 @@ def test_get_policy_and_config_classes(policy_name: str):
 @pytest.mark.parametrize(
     "env_name,policy_name,extra_overrides",
     [
-        ("xarm", "tdmpc", ["policy.use_mpc=true", "dataset_repo_id=lerobot/xarm_lift_medium"]),
+        ("xarm", "tdmpc", ["policy.use_mpc=true", "dataset_repo_id=lecoro/xarm_lift_medium"]),
         ("pusht", "diffusion", []),
         ("pusht", "vqbet", []),
-        ("aloha", "act", ["env.task=AlohaInsertion-v0", "dataset_repo_id=lerobot/aloha_sim_insertion_human"]),
+        ("aloha", "act", ["env.task=AlohaInsertion-v0", "dataset_repo_id=lecoro/aloha_sim_insertion_human"]),
         (
             "aloha",
             "act",
-            ["env.task=AlohaInsertion-v0", "dataset_repo_id=lerobot/aloha_sim_insertion_scripted"],
+            ["env.task=AlohaInsertion-v0", "dataset_repo_id=lecoro/aloha_sim_insertion_scripted"],
         ),
         (
             "aloha",
             "act",
-            ["env.task=AlohaTransferCube-v0", "dataset_repo_id=lerobot/aloha_sim_transfer_cube_human"],
+            ["env.task=AlohaTransferCube-v0", "dataset_repo_id=lecoro/aloha_sim_transfer_cube_human"],
         ),
         (
             "aloha",
             "act",
-            ["env.task=AlohaTransferCube-v0", "dataset_repo_id=lerobot/aloha_sim_transfer_cube_scripted"],
+            ["env.task=AlohaTransferCube-v0", "dataset_repo_id=lecoro/aloha_sim_transfer_cube_scripted"],
         ),
         # Note: these parameters also need custom logic in the test function for overriding the Hydra config.
         (
             "aloha",
             "diffusion",
-            ["env.task=AlohaInsertion-v0", "dataset_repo_id=lerobot/aloha_sim_insertion_human"],
+            ["env.task=AlohaInsertion-v0", "dataset_repo_id=lecoro/aloha_sim_insertion_human"],
         ),
         # Note: these parameters also need custom logic in the test function for overriding the Hydra config.
-        ("pusht", "act", ["env.task=PushT-v0", "dataset_repo_id=lerobot/pusht"]),
+        ("pusht", "act", ["env.task=PushT-v0", "dataset_repo_id=lecoro/pusht"]),
         ("dora_aloha_real", "act_real", []),
         ("dora_aloha_real", "act_real_no_state", []),
     ],
@@ -382,7 +382,7 @@ def test_backward_compatibility(env_name, policy_name, extra_overrides, file_nam
         1. Inspect the differences in policy outputs and make sure you can account for them. Your PR should
            include a report on what changed and how that affected the outputs.
         2. Go to the `if __name__ == "__main__"` block of `tests/scripts/save_policy_to_safetensors.py` and
-           add the policies you want to update the test artifacts for.
+           add the algo you want to update the test artifacts for.
         3. Run `python tests/scripts/save_policy_to_safetensors.py`. The test artifact
            should be updated.
         4. Check that this test now passes.

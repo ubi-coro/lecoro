@@ -80,13 +80,13 @@
 Download our source code:
 ```bash
 git clone https://github.com/huggingface/lerobot.git
-cd lerobot
+cd lecoro
 ```
 
 Create a virtual environment with Python 3.10 and activate it, e.g. with [`miniconda`](https://docs.anaconda.com/free/miniconda/index.html):
 ```bash
-conda create -y -n lerobot python=3.10
-conda activate lerobot
+conda create -y -n lecoro python=3.10
+conda activate lecoro
 ```
 
 Install 🤗 LeRobot:
@@ -148,15 +148,15 @@ Check out [example 1](./examples/1_load_lerobot_dataset.py) that illustrates how
 
 You can also locally visualize episodes from a dataset on the hub by executing our script from the command line:
 ```bash
-python lerobot/scripts/visualize_dataset.py \
-    --repo-id lerobot/pusht \
+python lecoro/scripts/visualize_dataset.py \
+    --repo-id lecoro/pusht \
     --episode-index 0
 ```
 
 or from a dataset in a local folder with the `root` option and the `--local-files-only` (in the following case the dataset will be searched for in `./my_local_data_dir/lerobot/pusht`)
 ```bash
-python lerobot/scripts/visualize_dataset.py \
-    --repo-id lerobot/pusht \
+python lecoro/scripts/visualize_dataset.py \
+    --repo-id lecoro/pusht \
     --root ./my_local_data_dir \
     --local-files-only 1 \
     --episode-index 0
@@ -221,8 +221,8 @@ Check out [example 2](./examples/2_evaluate_pretrained_policy.py) that illustrat
 
 We also provide a more capable script to parallelize the evaluation over multiple environments during the same rollout. Here is an example with a pretrained model hosted on [lerobot/diffusion_pusht](https://huggingface.co/lerobot/diffusion_pusht):
 ```bash
-python lerobot/scripts/eval.py \
-    -p lerobot/diffusion_pusht \
+python lecoro/scripts/eval.py \
+    -p lecoro/diffusion_pusht \
     eval.n_episodes=10 \
     eval.batch_size=10
 ```
@@ -230,7 +230,7 @@ python lerobot/scripts/eval.py \
 Note: After training your own policy, you can re-evaluate the checkpoints with:
 
 ```bash
-python lerobot/scripts/eval.py -p {OUTPUT_DIR}/checkpoints/last/pretrained_model
+python lecoro/scripts/eval.py -p {OUTPUT_DIR}/checkpoints/last/pretrained_model
 ```
 
 See `python lerobot/scripts/eval.py --help` for more instructions.
@@ -242,11 +242,11 @@ Check out [example 3](./examples/3_train_policy.py) that illustrates how to trai
 In general, you can use our training script to easily train any policy. Here is an example of training the ACT policy on trajectories collected by humans on the Aloha simulation environment for the insertion task:
 
 ```bash
-python lerobot/scripts/train.py \
+python lecoro/scripts/train.py \
     policy=act \
     env=aloha \
     env.task=AlohaInsertion-v0 \
-    dataset_repo_id=lerobot/aloha_sim_insertion_human \
+    dataset_repo_id=lecoro/aloha_sim_insertion_human \
 ```
 
 The experiment directory is automatically generated and will show up in yellow in your terminal. It looks like `outputs/train/2024-05-05/20-21-12_aloha_act_default`. You can manually specify an experiment directory by adding this argument to the `train.py` python command:
@@ -288,10 +288,10 @@ Note: For efficiency, during training every checkpoint is evaluated on a low num
 
 #### Reproduce state-of-the-art (SOTA)
 
-We have organized our configuration files (found under [`lerobot/configs`](./lerobot/configs)) such that they reproduce SOTA results from a given model variant in their respective original works. Simply running:
+We have organized our configuration files (found under [`lerobot/configs`](lecoro/configs)) such that they reproduce SOTA results from a given model variant in their respective original works. Simply running:
 
 ```bash
-python lerobot/scripts/train.py policy=diffusion env=pusht
+python lecoro/scripts/train.py policy=diffusion env=pusht
 ```
 
 reproduces SOTA results for Diffusion Policy on the PushT task.
@@ -311,10 +311,10 @@ huggingface-cli login --token ${HUGGINGFACE_TOKEN} --add-to-git-credential
 
 Then point to your raw dataset folder (e.g. `data/aloha_static_pingpong_test_raw`), and push your dataset to the hub with:
 ```bash
-python lerobot/scripts/push_dataset_to_hub.py \
+python lecoro/scripts/push_dataset_to_hub.py \
 --raw-dir data/aloha_static_pingpong_test_raw \
 --out-dir data \
---repo-id lerobot/aloha_static_pingpong_test \
+--repo-id lecoro/aloha_static_pingpong_test \
 --raw-format aloha_hdf5
 ```
 

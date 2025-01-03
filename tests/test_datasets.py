@@ -26,24 +26,24 @@ from datasets import Dataset
 from huggingface_hub import HfApi
 from safetensors.torch import load_file
 
-import lerobot
-from lerobot.common.datasets.compute_stats import (
+import lecoro
+from lecoro.common.datasets.compute_stats import (
     aggregate_stats,
     compute_stats,
     get_stats_einops_patterns,
 )
-from lerobot.common.datasets.factory import make_dataset
-from lerobot.common.datasets.lerobot_dataset import (
+from lecoro.common.datasets.factory import make_dataset
+from lecoro.common.datasets.lerobot_dataset import (
     LeRobotDataset,
     MultiLeRobotDataset,
 )
-from lerobot.common.datasets.utils import (
+from lecoro.common.datasets.utils import (
     create_branch,
     flatten_dict,
     hf_transform_to_torch,
     unflatten_dict,
 )
-from lerobot.common.utils.utils import init_hydra_config, seeded_context
+from lecoro.common.utils.utils import init_hydra_config, seeded_context
 from tests.fixtures.constants import DUMMY_REPO_ID
 from tests.utils import DEFAULT_CONFIG_PATH, DEVICE, make_robot
 
@@ -101,8 +101,8 @@ def test_dataset_initialization(lerobot_dataset_factory, tmp_path):
 @pytest.mark.skip("TODO after v2 migration / removing hydra")
 @pytest.mark.parametrize(
     "env_name, repo_id, policy_name",
-    lerobot.env_dataset_policy_triplets
-    + [("aloha", ["lerobot/aloha_sim_insertion_human", "lerobot/aloha_sim_transfer_cube_human"], "act")],
+    lecoro.env_dataset_policy_triplets
+    + [("aloha", ["lecoro/aloha_sim_insertion_human", "lecoro/aloha_sim_transfer_cube_human"], "act")],
 )
 def test_factory(env_name, repo_id, policy_name):
     """
@@ -178,9 +178,9 @@ def test_multilerobotdataset_frames():
     # Note: We really do need three repo_ids here as at some point this caught an issue with the chaining
     # logic that wouldn't be caught with two repo IDs.
     repo_ids = [
-        "lerobot/aloha_sim_insertion_human_image",
-        "lerobot/aloha_sim_transfer_cube_human_image",
-        "lerobot/aloha_sim_insertion_scripted_image",
+        "lecoro/aloha_sim_insertion_human_image",
+        "lecoro/aloha_sim_transfer_cube_human_image",
+        "lecoro/aloha_sim_insertion_scripted_image",
     ]
     sub_datasets = [LeRobotDataset(repo_id) for repo_id in repo_ids]
     dataset = MultiLeRobotDataset(repo_ids)
@@ -212,7 +212,7 @@ def test_compute_stats_on_xarm():
     We compare with taking a straight min, mean, max, std of all the data in one pass (which we can do
     because we are working with a small dataset).
     """
-    dataset = LeRobotDataset("lerobot/xarm_lift_medium")
+    dataset = LeRobotDataset("lecoro/xarm_lift_medium")
 
     # reduce size of dataset sample on which stats compute is tested to 10 frames
     dataset.hf_dataset = dataset.hf_dataset.select(range(10))
@@ -293,12 +293,12 @@ def test_flatten_unflatten_dict():
 @pytest.mark.parametrize(
     "repo_id",
     [
-        "lerobot/pusht",
-        "lerobot/aloha_sim_insertion_human",
-        "lerobot/xarm_lift_medium",
+        "lecoro/pusht",
+        "lecoro/aloha_sim_insertion_human",
+        "lecoro/xarm_lift_medium",
         # (michel-aractingi) commenting the two datasets from openx as test is failing
-        # "lerobot/nyu_franka_play_dataset",
-        # "lerobot/cmu_stretch",
+        # "lecoro/nyu_franka_play_dataset",
+        # "lecoro/cmu_stretch",
     ],
 )
 # TODO(rcadene, aliberts): all these tests fail locally on Mac M1, but not on Linux

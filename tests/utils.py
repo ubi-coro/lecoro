@@ -23,13 +23,13 @@ from pathlib import Path
 import pytest
 import torch
 
-from lerobot import available_cameras, available_motors, available_robots
-from lerobot.common.robot_devices.cameras.utils import Camera
-from lerobot.common.robot_devices.motors.utils import MotorsBus
-from lerobot.common.robot_devices.robots.factory import make_robot as make_robot_from_cfg
-from lerobot.common.robot_devices.robots.utils import Robot
-from lerobot.common.utils.import_utils import is_package_available
-from lerobot.common.utils.utils import init_hydra_config
+from lecoro import available_cameras, available_motors, available_robots
+from lecoro.common.robot_devices.cameras.utils import Camera
+from lecoro.common.robot_devices.motors.utils import MotorsBus
+from lecoro.common.robot_devices.robots.factory import make_robot as make_robot_from_cfg
+from lecoro.common.robot_devices.robots.utils import Robot
+from lecoro.common.utils.import_utils import is_package_available
+from lecoro.common.utils.utils import init_hydra_config
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -353,13 +353,13 @@ def make_robot(robot_type: str, overrides: list[str] | None = None, mock=False) 
 
 def make_camera(camera_type, **kwargs) -> Camera:
     if camera_type == "opencv":
-        from lerobot.common.robot_devices.cameras.opencv import OpenCVCamera
+        from lecoro.common.robot_devices.cameras.opencv import OpenCVCamera
 
         camera_index = kwargs.pop("camera_index", OPENCV_CAMERA_INDEX)
         return OpenCVCamera(camera_index, **kwargs)
 
     elif camera_type == "intelrealsense":
-        from lerobot.common.robot_devices.cameras.intelrealsense import IntelRealSenseCamera
+        from lecoro.common.robot_devices.cameras.intelrealsense import IntelRealSenseCamera
 
         camera_index = kwargs.pop("camera_index", INTELREALSENSE_CAMERA_INDEX)
         return IntelRealSenseCamera(camera_index, **kwargs)
@@ -370,14 +370,14 @@ def make_camera(camera_type, **kwargs) -> Camera:
 
 def make_motors_bus(motor_type: str, **kwargs) -> MotorsBus:
     if motor_type == "dynamixel":
-        from lerobot.common.robot_devices.motors.dynamixel import DynamixelMotorsBus
+        from lecoro.common.robot_devices.motors.dynamixel import DynamixelMotorsBus
 
         port = kwargs.pop("port", DYNAMIXEL_PORT)
         motors = kwargs.pop("motors", DYNAMIXEL_MOTORS)
         return DynamixelMotorsBus(port, motors, **kwargs)
 
     elif motor_type == "feetech":
-        from lerobot.common.robot_devices.motors.feetech import FeetechMotorsBus
+        from lecoro.common.robot_devices.motors.feetech import FeetechMotorsBus
 
         port = kwargs.pop("port", FEETECH_PORT)
         motors = kwargs.pop("motors", FEETECH_MOTORS)

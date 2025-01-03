@@ -53,19 +53,19 @@ Then, `default.yaml` also contains common configuration parameters such as `devi
 Thanks to this `defaults` section in `default.yaml`, if you want to train Diffusion Policy with PushT, you really only need to run:
 
 ```bash
-python lerobot/scripts/train.py
+python lecoro/scripts/train.py
 ```
 
 However, you can be more explicit and launch the exact same Diffusion Policy training on PushT with:
 
 ```bash
-python lerobot/scripts/train.py policy=diffusion env=pusht
+python lecoro/scripts/train.py policy=diffusion env=pusht
 ```
 
 This way of overriding defaults via the CLI is especially useful when you want to change the policy and/or environment. For instance, you can train ACT on the default Aloha environment with:
 
 ```bash
-python lerobot/scripts/train.py policy=act env=aloha
+python lecoro/scripts/train.py policy=act env=aloha
 ```
 
 There are two things to note here:
@@ -79,7 +79,7 @@ _As an aside: we've set up all of our configurations so that they reproduce stat
 Now let's say that we want to train on a different task in the Aloha environment. If you look in `env/aloha.yaml` you will see something like:
 
 ```yaml
-# lerobot/configs/env/aloha.yaml
+# lecoro/configs/env/aloha.yaml
 env:
   task: AlohaInsertion-v0
 ```
@@ -87,8 +87,8 @@ env:
 And if you look in `policy/act.yaml` you will see something like:
 
 ```yaml
-# lerobot/configs/policy/act.yaml
-dataset_repo_id: lerobot/aloha_sim_insertion_human
+# lecoro/configs/policy/act.yaml
+dataset_repo_id: lecoro/aloha_sim_insertion_human
 ```
 
 But our Aloha environment actually supports a cube transfer task as well. To train for this task, you could manually modify the two yaml configuration files respectively.
@@ -113,7 +113,7 @@ Then, we'd also need to switch to using the cube transfer dataset.
 Then, you'd be able to run:
 
 ```bash
-python lerobot/scripts/train.py policy=act env=aloha
+python lecoro/scripts/train.py policy=act env=aloha
 ```
 
 and you'd be training and evaluating on the cube transfer task.
@@ -121,9 +121,9 @@ and you'd be training and evaluating on the cube transfer task.
 An alternative approach to editing the yaml configuration files, would be to override the defaults via the command line:
 
 ```bash
-python lerobot/scripts/train.py \
+python lecoro/scripts/train.py \
     policy=act \
-    dataset_repo_id=lerobot/aloha_sim_transfer_cube_human \
+    dataset_repo_id=lecoro/aloha_sim_transfer_cube_human \
     env=aloha \
     env.task=AlohaTransferCube-v0
 ```
@@ -133,12 +133,12 @@ There's something new here. Notice the `.` delimiter used to traverse the config
 Putting all that knowledge together, here's the command that was used to train https://huggingface.co/lerobot/act_aloha_sim_transfer_cube_human.
 
 ```bash
-python lerobot/scripts/train.py \
+python lecoro/scripts/train.py \
     hydra.run.dir=outputs/train/act_aloha_sim_transfer_cube_human \
     device=cuda
     env=aloha \
     env.task=AlohaTransferCube-v0 \
-    dataset_repo_id=lerobot/aloha_sim_transfer_cube_human \
+    dataset_repo_id=lecoro/aloha_sim_transfer_cube_human \
     policy=act \
     training.eval_freq=10000 \
     training.log_freq=250 \
@@ -157,7 +157,7 @@ There's one new thing here: `hydra.run.dir=outputs/train/act_aloha_sim_transfer_
 Above we discusses the our training script is set up such that Hydra looks for `default.yaml` in `lerobot/configs`. But, if you have a configuration file elsewhere in your filesystem you may use:
 
 ```bash
-python lerobot/scripts/train.py --config-dir PARENT/PATH --config-name FILE_NAME_WITHOUT_EXTENSION
+python lecoro/scripts/train.py --config-dir PARENT/PATH --config-name FILE_NAME_WITHOUT_EXTENSION
 ```
 
 Note: here we use regular syntax for providing CLI arguments to a Python script, not Hydra's `param_name=param_value` syntax.
@@ -165,7 +165,7 @@ Note: here we use regular syntax for providing CLI arguments to a Python script,
 As a concrete example, this becomes particularly handy when you have a folder with training outputs, and would like to re-run the training. For example, say you previously ran the training script with one of the earlier commands and have `outputs/train/my_experiment/checkpoints/pretrained_model/config.yaml`. This `config.yaml` file will have the full set of configuration parameters within it. To run the training with the same configuration again, do:
 
 ```bash
-python lerobot/scripts/train.py --config-dir outputs/train/my_experiment/checkpoints/last/pretrained_model --config-name config
+python lecoro/scripts/train.py --config-dir outputs/train/my_experiment/checkpoints/last/pretrained_model --config-name config
 ```
 
 Note that you may still use the regular syntax for config parameter overrides (eg: by adding `training.offline_steps=200000`).
@@ -205,7 +205,7 @@ Some metrics are useful for initial performance profiling. For example, if you f
 So far we've seen how to train Diffusion Policy for PushT and ACT for ALOHA. Now, what if we want to train ACT for PushT? Well, there are aspects of the ACT configuration that are specific to the ALOHA environments, and these happen to be incompatible with PushT. Therefore, trying to run the following will almost certainly raise an exception of sorts (eg: feature dimension mismatch):
 
 ```bash
-python lerobot/scripts/train.py policy=act env=pusht dataset_repo_id=lerobot/pusht
+python lecoro/scripts/train.py policy=act env=pusht dataset_repo_id=lecoro/pusht
 ```
 
 Please, head on over to our [advanced tutorial on adapting policy configuration to various environments](./advanced/train_act_pusht/train_act_pusht.md) to learn more.

@@ -2,7 +2,7 @@ import pytest
 import torch
 from datasets import Dataset
 
-from lerobot.common.datasets.utils import (
+from lecoro.common.datasets.utils import (
     calculate_episode_data_index,
     check_delta_timestamps,
     check_timestamps_sync,

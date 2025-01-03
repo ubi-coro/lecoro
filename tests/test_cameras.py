@@ -24,7 +24,7 @@ pytest -sx 'tests/test_cameras.py::test_camera[intelrealsense-True]'
 import numpy as np
 import pytest
 
-from lerobot.common.robot_devices.utils import RobotDeviceAlreadyConnectedError, RobotDeviceNotConnectedError
+from lecoro.common.robot_devices.utils import RobotDeviceAlreadyConnectedError, RobotDeviceNotConnectedError
 from tests.utils import TEST_CAMERA_TYPES, make_camera, require_camera
 
 # Maximum absolute difference between two consecutive images recored by a camera.
@@ -183,9 +183,9 @@ def test_camera(request, camera_type, mock):
 def test_save_images_from_cameras(tmpdir, request, camera_type, mock):
     # TODO(rcadene): refactor
     if camera_type == "opencv":
-        from lerobot.common.robot_devices.cameras.opencv import save_images_from_cameras
+        from lecoro.common.robot_devices.cameras.opencv import save_images_from_cameras
     elif camera_type == "intelrealsense":
-        from lerobot.common.robot_devices.cameras.intelrealsense import save_images_from_cameras
+        from lecoro.common.robot_devices.cameras.intelrealsense import save_images_from_cameras
 
     # Small `record_time_s` to speedup unit tests
     save_images_from_cameras(tmpdir, record_time_s=0.02, mock=mock)

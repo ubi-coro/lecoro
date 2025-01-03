@@ -14,13 +14,13 @@ from pathlib import Path
 import torch
 from huggingface_hub import snapshot_download
 
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
-from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
+from lecoro.common.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata
+from lecoro.common.algo.diffusion.modeling_diffusion import DiffusionPolicy
 
 device = torch.device("cuda")
 
 # Download the diffusion policy for pusht environment
-pretrained_policy_path = Path(snapshot_download("lerobot/diffusion_pusht"))
+pretrained_policy_path = Path(snapshot_download("lecoro/diffusion_pusht"))
 # OR uncomment the following to evaluate a policy from the local outputs/train folder.
 # pretrained_policy_path = Path("outputs/train/example_pusht_diffusion")
 
@@ -42,7 +42,7 @@ delta_timestamps = {
 
 # Load the last 10% of episodes of the dataset as a validation set.
 # - Load dataset metadata
-dataset_metadata = LeRobotDatasetMetadata("lerobot/pusht")
+dataset_metadata = LeRobotDatasetMetadata("lecoro/pusht")
 # - Calculate train and val episodes
 total_episodes = dataset_metadata.total_episodes
 episodes = list(range(dataset_metadata.total_episodes))
@@ -53,8 +53,8 @@ print(f"Number of episodes in full dataset: {total_episodes}")
 print(f"Number of episodes in training dataset (90% subset): {len(train_episodes)}")
 print(f"Number of episodes in validation dataset (10% subset): {len(val_episodes)}")
 # - Load train an val datasets
-train_dataset = LeRobotDataset("lerobot/pusht", episodes=train_episodes, delta_timestamps=delta_timestamps)
-val_dataset = LeRobotDataset("lerobot/pusht", episodes=val_episodes, delta_timestamps=delta_timestamps)
+train_dataset = LeRobotDataset("lecoro/pusht", episodes=train_episodes, delta_timestamps=delta_timestamps)
+val_dataset = LeRobotDataset("lecoro/pusht", episodes=val_episodes, delta_timestamps=delta_timestamps)
 print(f"Number of frames in training dataset (90% subset): {len(train_dataset)}")
 print(f"Number of frames in validation dataset (10% subset): {len(val_dataset)}")
 

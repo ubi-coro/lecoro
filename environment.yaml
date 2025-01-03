@@ -1,0 +1,23 @@
+name: lecoro
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - numpy
+  - pynput
+  - matplotlib
+  - pip
+  - pip:
+      - -e .
+      - -git+https://github.com/huggingface/lerobot.git@8e7d697#egg=lerobot  # latest commit with dataset v2
+      - -git+https://github.com/facebookresearch/r3m@main#egg=r3m
+      - hydra_zen
+      - pynput
+      - dynamixel_sdk
+      - timm
+      - tqdm
+      - datasets
+      - jsonlines
+      - diffusers==0.11.1
+      - deepdiff

@@ -19,10 +19,10 @@ from pathlib import Path
 import torch
 from safetensors.torch import save_file
 
-from lerobot.common.datasets.factory import make_dataset
-from lerobot.common.policies.factory import make_policy
-from lerobot.common.utils.utils import init_hydra_config, set_global_seed
-from lerobot.scripts.train import make_optimizer_and_scheduler
+from lecoro.common.datasets.factory import make_dataset
+from lecoro.common.algo.factory import make_policy
+from lecoro.common.utils.utils import init_hydra_config, set_global_seed
+from lecoro.scripts.train import make_optimizer_and_scheduler
 from tests.utils import DEFAULT_CONFIG_PATH
 
 
@@ -126,7 +126,7 @@ if __name__ == "__main__":
         # ("dora_aloha_real", "act_real_no_state", ["policy.n_action_steps=10"], ""),
     ]
     if len(env_policies) == 0:
-        raise RuntimeError("No policies were provided!")
+        raise RuntimeError("No algo were provided!")
     for env, policy, extra_overrides, file_name_extra in env_policies:
         save_policy_to_safetensors(
             "tests/data/save_policy_to_safetensors", env, policy, extra_overrides, file_name_extra

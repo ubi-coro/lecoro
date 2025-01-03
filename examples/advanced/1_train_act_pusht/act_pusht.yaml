@@ -4,7 +4,7 @@
 # (to avoid evaluating on seeds used for generating the training data).
 seed: 100000
 # Change the dataset repository to the PushT one.
-dataset_repo_id: lerobot/pusht
+dataset_repo_id: lecoro/pusht
 
 override_dataset_stats:
   observation.image:

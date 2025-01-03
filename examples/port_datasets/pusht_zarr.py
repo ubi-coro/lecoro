@@ -4,8 +4,8 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from lerobot.common.datasets.lerobot_dataset import LEROBOT_HOME, LeRobotDataset
-from lerobot.common.datasets.push_dataset_to_hub._download_raw import download_raw
+from lecoro.common.datasets.lerobot_dataset import LEROBOT_HOME, LeRobotDataset
+from lecoro.common.datasets.push_dataset_to_hub._download_raw import download_raw
 
 PUSHT_TASK = "Push the T-shaped blue block onto the T-shaped green target surface."
 PUSHT_FEATURES = {
@@ -65,11 +65,11 @@ def build_features(mode: str) -> dict:
 
 def load_raw_dataset(zarr_path: Path):
     try:
-        from lerobot.common.datasets.push_dataset_to_hub._diffusion_policy_replay_buffer import (
+        from lecoro.common.datasets.push_dataset_to_hub._diffusion_policy_replay_buffer import (
             ReplayBuffer as DiffusionPolicyReplayBuffer,
         )
     except ModuleNotFoundError as e:
-        print("`gym_pusht` is not installed. Please install it with `pip install 'lerobot[gym_pusht]'`")
+        print("`gym_pusht` is not installed. Please install it with `pip install 'lecoro[gym_pusht]'`")
         raise e
 
     zarr_data = DiffusionPolicyReplayBuffer.copy_from_path(zarr_path)
@@ -81,7 +81,7 @@ def calculate_coverage(zarr_data):
         import pymunk
         from gym_pusht.envs.pusht import PushTEnv, pymunk_to_shapely
     except ModuleNotFoundError as e:
-        print("`gym_pusht` is not installed. Please install it with `pip install 'lerobot[gym_pusht]'`")
+        print("`gym_pusht` is not installed. Please install it with `pip install 'lecoro[gym_pusht]'`")
         raise e
 
     block_pos = zarr_data["state"][:, 2:4]
@@ -138,7 +138,7 @@ def main(raw_dir: Path, repo_id: str, mode: str = "video", push_to_hub: bool = T
         shutil.rmtree(LEROBOT_HOME / repo_id)
 
     if not raw_dir.exists():
-        download_raw(raw_dir, repo_id="lerobot-raw/pusht_raw")
+        download_raw(raw_dir, repo_id="lecoro-raw/pusht_raw")
 
     zarr_data = load_raw_dataset(zarr_path=raw_dir / "pusht_cchi_v7_replay.zarr")
 
@@ -201,7 +201,7 @@ def main(raw_dir: Path, repo_id: str, mode: str = "video", push_to_hub: bool = T
 
 if __name__ == "__main__":
     # To try this script, modify the repo id with your own HuggingFace user (e.g cadene/pusht)
-    repo_id = "lerobot/pusht"
+    repo_id = "lecoro/pusht"
 
     modes = ["video", "image", "keypoints"]
     # Uncomment if you want to try with a specific mode
@@ -209,7 +209,7 @@ if __name__ == "__main__":
     # modes = ["image"]
     # modes = ["keypoints"]
 
-    raw_dir = Path("data/lerobot-raw/pusht_raw")
+    raw_dir = Path("data/lecoro-raw/pusht_raw")
     for mode in modes:
         if mode in ["image", "keypoints"]:
             repo_id += f"_{mode}"

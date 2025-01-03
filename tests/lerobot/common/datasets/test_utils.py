@@ -16,7 +16,7 @@
 
 from huggingface_hub import DatasetCard
 
-from lerobot.common.datasets.utils import create_lerobot_dataset_card
+from lecoro.common.datasets.utils import create_lerobot_dataset_card
 
 
 def test_default_parameters():

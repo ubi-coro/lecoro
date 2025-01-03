@@ -28,8 +28,8 @@ from pathlib import Path
 import pytest
 import torch
 
-from lerobot.common.robot_devices.robots.manipulator import ManipulatorRobot
-from lerobot.common.robot_devices.utils import RobotDeviceAlreadyConnectedError, RobotDeviceNotConnectedError
+from lecoro.common.robot_devices.robots.manipulator import ManipulatorRobot
+from lecoro.common.robot_devices.utils import RobotDeviceAlreadyConnectedError, RobotDeviceNotConnectedError
 from tests.utils import TEST_ROBOT_TYPES, make_robot, mock_calibration_dir, require_robot
 
 

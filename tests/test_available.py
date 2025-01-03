@@ -18,19 +18,19 @@ import importlib
 import gymnasium as gym
 import pytest
 
-import lerobot
-from lerobot.common.policies.act.modeling_act import ACTPolicy
-from lerobot.common.policies.diffusion.modeling_diffusion import DiffusionPolicy
-from lerobot.common.policies.tdmpc.modeling_tdmpc import TDMPCPolicy
-from lerobot.common.policies.vqbet.modeling_vqbet import VQBeTPolicy
+import lecoro
+from lecoro.common.algo.act.modeling_act import ACTPolicy
+from lecoro.common.algo.diffusion.modeling_diffusion import DiffusionPolicy
+from lecoro.common.algo.tdmpc.modeling_tdmpc import TDMPCPolicy
+from lecoro.common.algo.vqbet.modeling_vqbet import VQBeTPolicy
 from tests.utils import require_env
 
 
-@pytest.mark.parametrize("env_name, task_name", lerobot.env_task_pairs)
+@pytest.mark.parametrize("env_name, task_name", lecoro.env_task_pairs)
 @require_env
 def test_available_env_task(env_name: str, task_name: list):
     """
-    This test verifies that all environments listed in `lerobot/__init__.py` can
+    This test verifies that all environments listed in `lecoro/__init__.py` can
     be successfully imported — if they're installed — and that their
     `available_tasks_per_env` are valid.
     """
@@ -42,8 +42,8 @@ def test_available_env_task(env_name: str, task_name: list):
 
 def test_available_policies():
     """
-    This test verifies that the class attribute `name` for all policies is
-    consistent with those listed in `lerobot/__init__.py`.
+    This test verifies that the class attribute `name` for all algo is
+    consistent with those listed in `lecoro/__init__.py`.
     """
     policy_classes = [
         ACTPolicy,
@@ -52,14 +52,14 @@ def test_available_policies():
         VQBeTPolicy,
     ]
     policies = [pol_cls.name for pol_cls in policy_classes]
-    assert set(policies) == set(lerobot.available_policies), policies
+    assert set(policies) == set(lecoro.available_policies), policies
 
 
 def test_print():
-    print(lerobot.available_envs)
-    print(lerobot.available_tasks_per_env)
-    print(lerobot.available_datasets)
-    print(lerobot.available_datasets_per_env)
-    print(lerobot.available_real_world_datasets)
-    print(lerobot.available_policies)
-    print(lerobot.available_policies_per_env)
+    print(lecoro.available_envs)
+    print(lecoro.available_tasks_per_env)
+    print(lecoro.available_datasets)
+    print(lecoro.available_datasets_per_env)
+    print(lecoro.available_real_world_datasets)
+    print(lecoro.available_policies)
+    print(lecoro.available_policies_per_env)

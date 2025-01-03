@@ -5,10 +5,10 @@ This tutorial explains how to resume a training run that you've started with the
 Let's consider the example of training ACT for one of the ALOHA tasks. Here's a command that can achieve that:
 
 ```bash
-python lerobot/scripts/train.py \
+python lecoro/scripts/train.py \
     hydra.run.dir=outputs/train/run_resumption \
     policy=act \
-    dataset_repo_id=lerobot/aloha_sim_transfer_cube_human \
+    dataset_repo_id=lecoro/aloha_sim_transfer_cube_human \
     env=aloha \
     env.task=AlohaTransferCube-v0 \
     training.log_freq=25 \
@@ -21,7 +21,7 @@ Here we're using the default dataset and environment for ACT, and we've taken ca
 To resume, all that we have to do is run the training script, providing the run directory, and the resume option:
 
 ```bash
-python lerobot/scripts/train.py \
+python lecoro/scripts/train.py \
     hydra.run.dir=outputs/train/run_resumption \
     resume=true
 ```
