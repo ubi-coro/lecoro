@@ -139,6 +139,32 @@ MODEL_BAUDRATE_TABLE = {
     "xc430-w150": X_SERIES_BAUDRATE_TABLE,
 }
 
+INTERBOTIX_MOTORMODELS = {
+    'vx300s' : [
+        'xm540-w270',
+        'xm540-w270',
+        'xm540-w270',
+        'xm540-w270',
+        'xm540-w270',
+        'xm540-w270',
+        'xm540-w270',
+        'xm430-w350',
+        'xm430-w350',
+
+    ],
+    'wx250s' : [
+        'xm430-w350',
+        'xm430-w350',
+        'xm430-w350',
+        'xm430-w350',
+        'xm430-w350',
+        'xm430-w350',
+        'xm430-w350',
+        'xl430-w250',
+        'xc430-w150'
+    ]
+}
+
 NUM_READ_RETRY = 10
 NUM_WRITE_RETRY = 10
 
@@ -226,6 +252,15 @@ def assert_same_address(model_ctrl_table, motor_models, data_name):
         raise NotImplementedError(
             f"At least two motor models use a different bytes representation for `data_name`='{data_name}' ({list(zip(motor_models, all_bytes, strict=False))}). Contact a LeRobot maintainer."
         )
+
+
+def require_connection(method):
+    """Decorator to check if the device is connected before executing the method."""
+    def wrapper(self, *args, **kwargs):
+        if not getattr(self, "is_connected", False):
+            raise RobotDeviceNotConnectedError(f"{self.__class__.__name__} is not connected.")
+        return method(self, *args, **kwargs)
+    return wrapper
 
 
 class TorqueMode(enum.Enum):
@@ -865,3 +900,180 @@ class DynamixelMotorsBus:
     def __del__(self):
         if getattr(self, "is_connected", False):
             self.disconnect()
+
+
+class BaseManipulator(ABC):
+    def __init__(self):
+        # interface for managing lerobots Dynamixel Bus and
+        pass
+
+    def run_arm_calibration(self, arm_name, arm_type):
+        # arm_type must be in {"follower", "leader"}
+
+        """This function ensures that a neural network trained on data collected on a given robot
+        can work on another robot. For instance before calibration, setting a same goal position
+        for each motor of two different robots will get two very different positions. But after calibration,
+        the two robots will move to the same position.To this end, this function computes the homing offset
+        and the drive mode for each motor of a given robot.
+
+        Homing offset is used to shift the motor position to a ]-2048, +2048[ nominal range (when the motor uses 2048 steps
+        to complete a half a turn). This range is set around an arbitrary "zero position" corresponding to all motor positions
+        being 0. During the calibration process, you will need to manually move the robot to this "zero position".
+
+        Drive mode is used to invert the rotation direction of the motor. This is useful when some motors have been assembled
+        in the opposite orientation for some robots. During the calibration process, you will need to manually move the robot
+        to the "rotated position".
+
+        After calibration, the homing offsets and drive modes are stored in a cache.
+
+        Example of usage:
+        ```python
+        run_arm_calibration(arm, "koch", "left", "follower")
+        ```
+        """
+        if (self.read_register("Torque_Enable") != TorqueMode.DISABLED.value).any():
+            raise ValueError("To run calibration, the torque must be disabled on all motors.")
+
+        print(f"\nRunning calibration of {arm_name} {arm_type}...")
+
+        print("\nMove arm to zero position")
+        print("See: " + URL_TEMPLATE.format(robot='aloha', arm=arm_type, position="zero"))
+        input("Press Enter to continue...")
+
+        # We arbitrarily chose our zero target position to be a straight horizontal position with gripper upwards and closed.
+        # It is easy to identify and all motors are in a "quarter turn" position. Once calibration is done, this position will
+        # correspond to every motor angle being 0. If you set all 0 as Goal Position, the arm will move in this position.
+        zero_target_pos = convert_degrees_to_steps(ZERO_POSITION_DEGREE, self.motor_models)
+
+        # Compute homing offset so that `present_position + homing_offset ~= target_position`.
+        zero_pos = self.get_joint_positions(apply_calibration=False)
+        zero_nearest_pos = compute_nearest_rounded_position(zero_pos, self.motor_models)
+        homing_offset = zero_target_pos - zero_nearest_pos
+
+        # The rotated target position corresponds to a rotation of a quarter turn from the zero position.
+        # This allows to identify the rotation direction of each motor.
+        # For instance, if the motor rotates 90 degree, and its value is -90 after applying the homing offset, then we know its rotation direction
+        # is inverted. However, for the calibration being successful, we need everyone to follow the same target position.
+        # Sometimes, there is only one possible rotation direction. For instance, if the gripper is closed, there is only one direction which
+        # corresponds to opening the gripper. When the rotation direction is ambiguous, we arbitrarely rotate clockwise from the point of view
+        # of the previous motor in the kinetic chain.
+        print("\nMove arm to rotated target position")
+        print("See: " + URL_TEMPLATE.format(robot='aloha', arm=arm_type, position="rotated"))
+        input("Press Enter to continue...")
+
+        rotated_target_pos = convert_degrees_to_steps(ROTATED_POSITION_DEGREE, self.motor_models)
+
+        # Find drive mode by rotating each motor by a quarter of a turn.
+        # Drive mode indicates if the motor rotation direction should be inverted (=1) or not (=0).
+        rotated_pos = self.get_joint_positions(apply_calibration=False)
+        drive_mode = (rotated_pos < zero_pos).astype(np.int32)
+
+        # Re-compute homing offset to take into account drive mode
+        rotated_drived_pos = apply_drive_mode(rotated_pos, drive_mode)
+        rotated_nearest_pos = compute_nearest_rounded_position(rotated_drived_pos, self.motor_models)
+        homing_offset = rotated_target_pos - rotated_nearest_pos
+
+        print("\nMove arm to rest position")
+        print("See: " + URL_TEMPLATE.format(robot='aloha', arm=arm_type, position="rest"))
+        input("Press Enter to continue...")
+        print()
+
+        # Joints with rotational motions are expressed in degrees in nominal range of [-180, 180]
+        calib_mode = [CalibrationMode.DEGREE.name] * len(self.motor_models)
+
+        if "gripper" in self.joint_names:
+            # Joints with linear motions (like gripper of Aloha) are experessed in nominal range of [0, 100]
+            calib_idx = self.joint_names.index("gripper")
+            calib_mode[calib_idx] = CalibrationMode.LINEAR.name
+
+        calib_data = {
+            "homing_offset": homing_offset.tolist(),
+            "drive_mode": drive_mode.tolist(),
+            "start_pos": zero_pos.tolist(),
+            "end_pos": rotated_pos.tolist(),
+            "calib_mode": calib_mode,
+            "motor_names": self.joint_names,
+        }
+        return calib_data
+
+    def set_presets(self, arm_type):
+        pass
+
+    @property
+    @abstractmethod
+    def joint_names(self):
+        pass
+
+    @property
+    @abstractmethod
+    def motor_models(self):
+        pass
+
+    @property
+    @abstractmethod
+    def is_connected(self):
+        pass
+
+    @abstractmethod
+    def connect(self):
+        pass
+
+    @abstractmethod
+    def disconnect(self):
+        pass
+
+    @abstractmethod
+    def set_calibration(self, calibration):
+        pass
+
+    @abstractmethod
+    def apply_calibration(self, values, joint_names):
+        # same wrapper as DynamixelBus (maybe just for gripper?)
+        # maybe even same file?
+        pass
+
+    @abstractmethod
+    def revert_calibration(self, values, joint_names):
+        # same wrapper as DynamixelBus (maybe just for gripper?)
+        # maybe even same file?
+        pass
+
+    @abstractmethod
+    def get_joint_positions(self, apply_calibration=True):
+        pass
+
+    @abstractmethod
+    def get_single_joint_position(self, joint_name, apply_calibration=True):
+        pass
+
+    @abstractmethod
+    def set_joint_positions(self, joint_positions, moving_time=None, accel_time=None, apply_calibration=True, blocking=True):
+        pass
+
+    @abstractmethod
+    def set_single_joint_position(self, joint_name, position, moving_time=None, accel_time=None, apply_calibration=True, blocking=True):
+        pass
+
+    @abstractmethod
+    def set_trajectory_time(self, moving_time=None, accel_time=None):
+        pass
+
+    @abstractmethod
+    def set_op_mode(self, op_mode, joint_names=None):
+        pass
+
+    @abstractmethod
+    def set_pid_gains(self, p_gain=None, i_gain=None, d_gain=None, joint_names=None):
+        pass
+
+    @abstractmethod
+    def torque_on(self, joint_names=None):
+        pass
+
+    @abstractmethod
+    def torque_off(self, joint_names=None):
+        pass
+
+    @abstractmethod
+    def read_register(self, register_name, joint_names=None):
+        pass
