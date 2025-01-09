@@ -244,9 +244,9 @@ class ObservationEncoder(nn.Module):
             randomizers = randomizers if isinstance(randomizers, list) else [randomizers]  # might not be list
             for i, rand in enumerate(randomizers):
                 if isinstance(rand, partial):
-                    rand = rand(input_shape=shape)
+                    rand = rand(input_shape=out_shape)
                 assert isinstance(rand, Randomizer), f"ObservationEncoder: all randomizers must subclass @Randomizer"
-                out_shape = rand.output_shape_in(shape)
+                out_shape = rand.output_shape_in(out_shape)
                 randomizers[i] = rand
 
         # instantiate net if needed

@@ -118,6 +118,7 @@ def predict_action(observation, policy, device, use_amp):
         action = action.to("cpu")
 
     return action
+
 def init_keyboard_listener(use_foot_switch=False, play_sounds=False):
     # Allow to exit early while recording an episode or resetting the environment,
     # by tapping the right arrow key '->'. This might require a sudo permission
@@ -140,7 +141,7 @@ def init_keyboard_listener(use_foot_switch=False, play_sounds=False):
     if use_foot_switch:
         log_say(f"Press the right pedal to exit an episode, "
                 f"the middle pedal to exit recording and "
-                f"the left pedal to re-record an episode!", play_sounds)
+                f"the left pedal to re-record an episode!", play_sounds, blocking=True)
 
         def on_press(key):
             try:
@@ -160,7 +161,7 @@ def init_keyboard_listener(use_foot_switch=False, play_sounds=False):
     else:
         log_say(f"Press right to exit an episode, "
                 f"left to re-record an episode and "
-                f"escape to exit recording!", play_sounds)
+                f"escape to exit recording!", play_sounds, blocking=True)
 
         def on_press(key):
             try:

@@ -24,8 +24,6 @@ from coro.common.config_gen.encoder import (
     register_obs_key
 )
 import coro.common.utils.tensor_utils as TU
-from coro.common.utils.dataset_utils import remove_modality_prefix
-from coro.common.utils.python_utils import is_invertible
 
 
 # MACRO FOR VALID IMAGE CHANNEL SIZES
@@ -46,17 +44,6 @@ OBS_KEYS_TO_MODALITIES = {}
 # DO NOT MODIFY THIS
 # This holds the registered observation modality classes
 OBS_MODALITY_CLASSES = {}
-
-
-def get_any_obs_key(keys: set) -> str:
-    if 'action' not in keys:
-        raise ValueError("Missing 'action' key.")
-
-    obs_keys = keys - {'action'}
-    if not obs_keys:
-        raise ValueError("No observation keys provided.")
-
-    return next(iter(obs_keys))
 
 
 def get_empty_obs_dict():
@@ -300,7 +287,7 @@ def all_keys(config: DictConfig, prefix_modality=False):
 
             for group in _config.keys():
                 all_keys += _all_obs_key(_config[group], must_be_ops=True)
-        return sorted(set(all_keys))
+        return set(sorted(all_keys))
     return _all_obs_key(config)
 
 def merge_obs_keys(obs_config: 'ObsConfig', env: 'ManipulatorEnv') -> List:
@@ -328,78 +315,6 @@ def merge_obs_keys(obs_config: 'ObsConfig', env: 'ManipulatorEnv') -> List:
                       f"are not present in the environment's observation space: {missing_keys}")
 
     return common_keys
-
-
-class ObsTranslator:
-    def __init__(self, obs_config: 'ObsConfig', modality_mappings: Dict[str, str] | None = None):
-        self.obs_config = obs_config
-        self.all_keys = set(all_keys(obs_config.modalities))
-
-        if modality_mappings is None:
-            modality_mappings = dict()
-        assert is_invertible(modality_mappings)
-        self.modality_mappings = modality_mappings
-        self.inv_modality_mappings = {value: key for key, value in modality_mappings.items()}
-
-        # store a list of all expected keys and a mapping from those keys to the group (observation, goal, subgoal) they are in
-        self._key_to_groups = dict()
-        _expected_keys = []
-        _all_groups = []
-        for group in self.obs_config.modalities:
-            _all_groups.append(group)
-            for keys in self.obs_config.modalities[group].values():
-                for key in keys:
-                    if key in self._key_to_groups:
-                        self._key_to_groups[key].append(group)
-                    else:
-                        self._key_to_groups[key] = [key]
-
-                    expected_modality = OBS_KEYS_TO_MODALITIES[key]
-                    if expected_modality in self.inv_modality_mappings:
-                        expected_modality = self.inv_modality_mappings[expected_modality]
-                    _expected_keys.append(f'observation.{expected_modality}.{key}')
-        self._expected_keys = set(_expected_keys)
-        self._empty_frame = {group: dict() for group in _all_groups}
-
-    def translate_frame(self, _frame: Dict[str, torch.Tensor]) -> Dict[str, Dict]:
-        # translate modalities and add group structure
-        frame = copy.deepcopy(self._empty_frame)
-        for key in _frame:
-            if key.startswith('observation.'):
-                stripped_key, modality = remove_modality_prefix(key, return_modality=True)
-
-                if modality in self.modality_mappings:
-                    modality = self.modality_mappings[modality]
-
-                # verify whether that key actually belongs to that modality
-                assert key_is_obs_modality(stripped_key, modality)
-
-                # add key to frame with group structure
-                for group in self._key_to_groups[key]:
-                    frame[group][stripped_key] = _frame[key]
-            else:
-                frame[key] = _frame[key]
-        return frame
-
-    def translate_observation_space(self, _observation_space: gym.spaces.Dict) -> Dict[str, tuple]:
-        # check if all expected keys are present
-        if not set(_observation_space.keys()).issuperset(self._expected_keys):
-            warnings.warn(
-                'obs_utils.FrameTranslator.translate_observation_space: observation space is missing keys:'
-                f'{self._expected_keys - set(_observation_space.keys())}'
-            )
-
-        shape_meta = {}
-        for key in list(_observation_space.keys()):
-            if key.startswith('observation.'):
-                stripped_key = remove_modality_prefix(key)
-                shape_meta[stripped_key] = _observation_space[key].shape
-        return shape_meta
-
-    def translate_hf_features(self, _features):
-        # should be the same as translate_observation_space
-        pass
-
 
 def center_crop(im, t_h, t_w):
     """

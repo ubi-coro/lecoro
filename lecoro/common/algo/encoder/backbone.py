@@ -372,7 +372,6 @@ class VisionTransformer(Backbone):
             del_head=True,
             restore_path="",
             # timm vit params
-            img_size=224,
             patch_size=16,
             embed_dim=768,
             depth=12,
@@ -384,7 +383,7 @@ class VisionTransformer(Backbone):
             **kwargs
     ):
         assert use_cls and not global_pool, "token counting only works for use_cls mode"
-        model = timm.models.vision_transformer.VisionTransformer(img_size=img_size, patch_size=patch_size,
+        model = timm.models.vision_transformer.VisionTransformer(img_size=input_shape[1:3], patch_size=patch_size,
                                                                  embed_dim=embed_dim, depth=depth,
                                                                  num_heads=num_heads, mlp_ratio=mlp_ratio,
                                                                  qkv_bias=qkv_bias,

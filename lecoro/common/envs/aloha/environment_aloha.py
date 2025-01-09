@@ -75,9 +75,11 @@ class AlohaManipulatorEnv(ManipulatorEnv):
 
         # start key listener for episode termination
         self.terminate = False
+
         def on_press(key):
             if key == keyboard.Key.esc:
                 self.terminate = True
+
         self.listener = keyboard.Listener(on_press=on_press)
         self.listener.start()
 
@@ -172,10 +174,6 @@ class AlohaManipulatorEnv(ManipulatorEnv):
             print(f"Connecting {name} leader arm.")
             self.leader_arms[name].connect()
 
-        # We assume that at connection time, arms are in a rest position, and torque can
-        # be safely disabled to run calibration and/or set robot preset configurations.
-        self.toggle_torque(leader=False, follower=False)
-
         self.run_calibration()
 
         # Set robot preset (e.g. torque in leader gripper for Koch v1.1)
@@ -241,7 +239,9 @@ class AlohaManipulatorEnv(ManipulatorEnv):
                     calibration = json.load(f)
             else:
                 print(f"Missing calibration file '{arm_calib_path}'")
+                input(f"Make sure the arm can be torqued off and press Enter to proceed with calibration!")
 
+                arm.torque_off()
                 calibration = arm.run_arm_calibration(name, arm_type)
 
                 print(f"Calibration is done! Saving calibration file '{arm_calib_path}'")
@@ -325,7 +325,7 @@ class AlohaManipulatorEnv(ManipulatorEnv):
         return 0
 
     def teleop_step(
-        self, record_data=False
+            self, record_data=False
     ) -> None | tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
         if not self.is_connected:
             raise RobotDeviceNotConnectedError(
@@ -333,11 +333,11 @@ class AlohaManipulatorEnv(ManipulatorEnv):
             )
 
         # Prepare to assign the position of the leader to the follower
-        leader_pos = {}
+        follower_goal_pos = []
         for name in self.leader_arms:
             before_lread_t = time.perf_counter()
-            leader_pos[name] = self.leader_arms[name].get_joint_positions()
-            leader_pos[name] = torch.from_numpy(leader_pos[name])
+            leader_pos = self.leader_arms[name].get_joint_positions()
+            follower_goal_pos.append(torch.from_numpy(leader_pos))
             self.logs[f"read_leader_{name}_pos_dt_s"] = time.perf_counter() - before_lread_t
 
         # sleep to match frequency
@@ -346,7 +346,7 @@ class AlohaManipulatorEnv(ManipulatorEnv):
         self.last_step_ts = time.perf_counter()
 
         # Send goal position to the follower
-        follower_goal_pos = sum(leader_pos.values())
+        follower_goal_pos = torch.concat(follower_goal_pos)
         follower_goal_pos = self.send_action(follower_goal_pos)
 
         # Early exit when recording data is not requested
@@ -455,7 +455,6 @@ class AlohaManipulatorEnv(ManipulatorEnv):
 
     def __del__(self):
         self.close()
-
 
 # todo: write aloha simulation
 

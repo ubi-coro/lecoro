@@ -7,6 +7,7 @@ from coro.common.env.base import ManipulatorEnv
 import coro.common.utils.control_utils as CtrlUtils
 import coro.common.utils.config_utils as ConfUtils
 import coro.common.utils.dataset_utils as DataUtils
+from coro.common.utils.hf_utils import push_to_hub
 import coro.common.utils.obs_utils as ObsUtils
 from coro.common.config_gen.recorder import BaseRecorderConfig
 from coro.common.config_gen.experiment import ExperimentConfig
@@ -25,24 +26,19 @@ class BaseRecorder:
     def __init__(self,
                  env: ManipulatorEnv,
                  obs_keys: List[str],
-                 rec_config: BaseRecorderConfig | None = None,
-                 exp_config: ExperimentConfig | None = None,
+                 config: BaseRecorderConfig | None = None,
                  **kwargs):
-        if rec_config is None:
-            rec_config = BaseRecorderConfig()
-        if exp_config is None:
-            exp_config = ExperimentConfig()
+        if config is None:
+            config = BaseRecorderConfig()
 
         # Overwrite config arguments using kwargs
-        self.config = ConfUtils.replace(rec_config, **kwargs)
+        self.config = replace(config, **kwargs)
+        if self.config.task is None:
+            self.config.task = self.config.dataset_repo_id
 
-        super().__init__(env, obs_keys)
         self.env = env
         self.obs_keys = obs_keys
-        self.root = exp_config.root
-        self.name = exp_config.name
-        self.task = exp_config.name if self.config.task is None else self.config.task
-        self.dataset: DataUtils.LeRobotDataset | None = None
+        self.dataset = None
 
         self.img_keys = [
             k for k in self.obs_keys if
@@ -69,15 +65,17 @@ class BaseRecorder:
 
             self.env.reset()
 
-            # close gripper to start
-            CtrlUtils.log_say("Close both gripper to start!", self.config.play_sounds)
-            while not all([pos < 5.0 for pos in self.env.gripper_pos]):
-                time.sleep(0.1)
-            self.env.toggle_torque(leader=False)
+            episode_index = self.dataset.num_episodes
+            CtrlUtils.log_say(f"Recording episode {episode_index + 1}", self.config.play_sounds, blocking=True)
+            self.await_gripper_closed(events)
+
+            if events["stop_recording"]:
+                self.env.toggle_torque(leader=True)
+                time.sleep(0.5)  # wait for audio to finish
+                break
 
             # recording loop
-            episode_index = self.dataset.num_episodes
-            CtrlUtils.log_say(f"Recording episode {episode_index}", self.config.play_sounds)
+            self.env.toggle_torque(leader=False)
             self.record_episode(events)
 
             if events["rerecord_episode"]:
@@ -88,18 +86,27 @@ class BaseRecorder:
                 continue
 
             # Increment by one dataset["current_episode_index"]
-            self.dataset.save_episode(self.task)
+            self.dataset.save_episode(self.config.task)
 
             if events["stop_recording"]:
+                self.env.toggle_torque(leader=True)
+                time.sleep(0.5)  # wait for audio to finish
                 break
 
+        self.env.close()
+        CtrlUtils.log_say("Exiting, the dataset will be saved to disk", self.config.play_sounds, blocking=True)
         self.dataset.consolidate(self.config.run_compute_stats)
 
         if self.config.push_to_hub:
-            self.dataset.push_to_hub(tags=None)
+            push_to_hub(dataset=self.dataset, tags=None)
 
-        CtrlUtils.log_say("Exiting", self.config.play_sounds)
         return self.dataset
+
+    def await_gripper_closed(self, events: Dict) -> bool:
+        # close gripper to start
+        CtrlUtils.log_say("Close both grippers to start!", self.config.play_sounds)
+        while not all([pos < 5.0 for pos in self.env.gripper_pos]) and not events["stop_recording"]:
+            time.sleep(0.1)
 
     def record_episode(self, events: Dict) -> None:
         """
@@ -110,7 +117,7 @@ class BaseRecorder:
         """
         timestamp = 0
         start_episode_t = time.perf_counter()
-        with tqdm.tqdm(total=self.config.episode_time_s, color='green') as pbar:
+        with tqdm.tqdm(total=self.config.episode_time_s, colour='green') as pbar:
             while timestamp < self.config.episode_time_s:
 
                 frame = self.env.teleop_step(record_data=True)
@@ -121,6 +128,8 @@ class BaseRecorder:
                 pbar.update(min([timestamp - pbar.n, self.config.episode_time_s - pbar.n]))
                 if events["exit_early"]:
                     events["exit_early"] = False
+                    if self.config.play_sounds:
+                        time.sleep(1.0)
                     break
 
     def init_dataset(self):
@@ -130,8 +139,8 @@ class BaseRecorder:
         # Create empty dataset or load existing saved episodes
         if self.config.resume:
             dataset = DataUtils.LeRobotDataset(
-                repo_id=self.name,
-                root=self.root,
+                repo_id=self.config.dataset_repo_id,
+                root=self.config.root,
                 local_files_only=True
             )
             CtrlUtils.sanity_check_dataset_compatibility(
@@ -147,16 +156,16 @@ class BaseRecorder:
 
         else:
             dataset = DataUtils.LeRobotDataset.create(
-                repo_id=self.name,
+                repo_id=self.config.dataset_repo_id,
+                root=self.config.root,
                 fps=self.env.fps,
-                root=self.root,
                 use_videos=self.config.video,
                 features=self.get_features(),
                 robot_type=self.env.config.robot_type,
                 image_writer_processes=self.config.num_image_writer_processes,
                 image_writer_threads=self.config.num_image_writer_threads_per_camera * len(self.img_keys)
             )
-        self.dataset = dataset
+        self.dataset: DataUtils.LeRobotDataset = dataset
 
     def get_features(self) -> Dict:
         """

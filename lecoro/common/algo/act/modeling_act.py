@@ -20,7 +20,8 @@ The majority of changes here involve removing unused code, unifying naming, and 
 """
 
 import math
-from collections import deque
+from collections import deque, OrderedDict
+from dataclasses import asdict, replace
 from itertools import chain
 from typing import Callable
 
@@ -28,21 +29,38 @@ import einops
 import numpy as np
 import torch
 import torch.nn.functional as F  # noqa: N812
-import torchvision
 from huggingface_hub import PyTorchModelHubMixin
+from lerobot.common.policies.act.configuration_act import ACTConfig
 from torch import Tensor, nn
-from torchvision.models._utils import IntermediateLayerGetter
-from torchvision.ops.misc import FrozenBatchNorm2d
 
-from lecoro.common.algo.act.configuration_act import ACTConfig
-from lecoro.common.algo.normalize import Normalize, Unnormalize
+from coro.common.algo.algo import LeRobotPolicy
+from coro.common.model.encoder import encoder_factory, ObservationEncoder
+from coro.common.config_gen.algo import register_variant, register_param
+from coro.common.config_gen.observation import ObsConfig
+from coro.common.utils.obs_utils import filter_modality
+
+"""
+changes from lerobot:
+LeRobotPolicy __init__ kwargs remain
+Config can still be passed as usual
+@register_variant will store config parameters explicitly by turning a dataclass into keywords
+uses custom ActObsEncoder
+vae_state_keys can be passed to the model directly
+reproduce the exact encoder specs
+LeRobot Policy preprocesses [group "goal_obs" -> key "qpos"]
+I can only choose one default value for every parameter -> I need one for each algo
+
+"""
 
 
+@register_variant(name='act', **asdict(ACTConfig()))
+@register_variant(name='act_large_heads16', **asdict(ACTConfig(dim_model=1024, n_heads=16)), encoder_node='act_large_encoder')
+@register_param('optimizer', is_a=torch.optim.Optimizer, default_value='adam')
+@register_param('lr_scheduler', is_a=torch.optim.lr_scheduler.LRScheduler, default_value='cosine-annealing')
 class ACTPolicy(
-    nn.Module,
+    LeRobotPolicy,
     PyTorchModelHubMixin,
     library_name="lecoro",
-    repo_url="https://github.com/huggingface/lerobot",
     tags=["robotics", "act"],
 ):
     """
@@ -51,11 +69,21 @@ class ACTPolicy(
     """
 
     name = "act"
+    default_encoder_node = "act_default_encoder"
 
     def __init__(
         self,
+        optimizer: Callable,
+        lr_scheduler: Callable | None = None,
+        grad_clip_norm: float | None = None,
+        use_amp: bool = True,
+
+        lr_backbone: float = 1e-6,
+        vae_state_keys: tuple[str] | None = None,
+
+
         config: ACTConfig | None = None,
-        dataset_stats: dict[str, dict[str, Tensor]] | None = None,
+        **kwargs
     ):
         """
         Args:
@@ -64,39 +92,83 @@ class ACTPolicy(
             dataset_stats: Dataset statistics to be used for normalization. If not passed here, it is expected
                 that they will be passed with a call to `load_state_dict` before the policy is used.
         """
-        super().__init__()
         if config is None:
             config = ACTConfig()
-        self.config: ACTConfig = config
+        self.algo_config: ACTConfig = replace(config, **kwargs)
 
-        self.normalize_inputs = Normalize(
-            config.input_shapes, config.input_normalization_modes, dataset_stats
+        # add new fields to dataclass config that are not part of LeRobot
+        # hacky, but we do not need dataclass integration
+        self.algo_config.vae_state_keys = vae_state_keys
+        self.algo_config.lr_backbone = lr_backbone
+
+        self.optimizer = optimizer
+        self.lr_scheduler = lr_scheduler
+        self.grad_clip_norm = grad_clip_norm
+        self.use_amp = use_amp
+        self.temporal_ensembler = None
+        self._action_queue = None
+
+    def make(
+        self,
+        obs_config: ObsConfig,
+        shape_meta: dict[str, tuple],
+        dataset_stats: dict[str, dict[str, Tensor]] | None = None
+    ):
+        LeRobotPolicy.__init__(
+            self,
+            obs_config=obs_config,
+            shape_meta=shape_meta,
+            optimizer=self.optimizer,
+            dataset_stats=dataset_stats,
+            lr_scheduler=self.lr_scheduler,
+            grad_clip_norm=self.grad_clip_norm,
+            use_amp=self.use_amp
         )
-        self.normalize_targets = Normalize(
-            config.output_shapes, config.output_normalization_modes, dataset_stats
-        )
-        self.unnormalize_outputs = Unnormalize(
-            config.output_shapes, config.output_normalization_modes, dataset_stats
-        )
 
-        self.model = ACT(config)
+    def _create_model(self):
+        self.algo_config.input_shapes = self.input_shapes
+        self.algo_config.output_shapes = self.output_shapes
 
-        self.expected_image_keys = [k for k in config.input_shapes if k.startswith("observation.image")]
+        self.model = ACT(algo_config=self.algo_config)
 
-        if config.temporal_ensemble_coeff is not None:
-            self.temporal_ensembler = ACTTemporalEnsembler(config.temporal_ensemble_coeff, config.chunk_size)
+        if self.algo_config.temporal_ensemble_coeff is not None:
+            self.temporal_ensembler = ACTTemporalEnsembler(self.algo_config.temporal_ensemble_coeff, self.algo_config.chunk_size)
 
-        self.reset()
+    def _create_optimizer_and_scheduler(self, optimizer: Callable, lr_scheduler: Callable | None):
+        # check this
+        optimizer_params_dicts = [
+            {
+                "params": [
+                    p
+                    for n, p in self.model.named_parameters()
+                    if 'backbones' not in n and p.requires_grad
+                ]
+            },
+            {
+                "params": [
+                    p
+                    for n, p in self.model.named_parameters()
+                    if 'backbones' in n and p.requires_grad
+                ],
+                "lr": self.algo_config.lr_backbone,
+            },
+        ]
+        self.optimizer = optimizer(optimizer_params_dicts)
+        if lr_scheduler is not None:
+            self.lr_scheduler = lr_scheduler(optimizer=self.optimizer)
 
     def reset(self):
         """This should be called whenever the environment is reset."""
-        if self.config.temporal_ensemble_coeff is not None:
+        if self.algo_config.temporal_ensemble_coeff is not None:
             self.temporal_ensembler.reset()
         else:
-            self._action_queue = deque([], maxlen=self.config.n_action_steps)
+            self._action_queue = deque([], maxlen=self.algo_config.n_action_steps)
+
+    def get_delta_timestamps(self, fps: float) -> dict:
+        return {'action': [i / fps for i in range(self.algo_config.chunk_size)]}
 
     @torch.no_grad
-    def select_action(self, batch: dict[str, Tensor]) -> Tensor:
+    def select_action(self, obs_dict: dict[str, Tensor], goal_dict=None) -> Tensor:
         """Select a single action given environment observations.
 
         This method wraps `select_actions` in order to return one action at a time for execution in the
@@ -105,14 +177,14 @@ class ACTPolicy(
         """
         self.eval()
 
-        batch = self.normalize_inputs(batch)
+        batch = self.normalize_inputs(obs_dict)
         if len(self.expected_image_keys) > 0:
             batch = dict(batch)  # shallow copy so that adding a key doesn't modify the original
             batch["observation.images"] = torch.stack([batch[k] for k in self.expected_image_keys], dim=-4)
 
         # If we are doing temporal ensembling, do online updates where we keep track of the number of actions
         # we are ensembling over.
-        if self.config.temporal_ensemble_coeff is not None:
+        if self.algo_config.temporal_ensemble_coeff is not None:
             actions = self.model(batch)[0]  # (batch_size, chunk_size, action_dim)
             actions = self.unnormalize_outputs({"action": actions})["action"]
             action = self.temporal_ensembler.update(actions)
@@ -121,7 +193,7 @@ class ACTPolicy(
         # Action queue logic for n_action_steps > 1. When the action_queue is depleted, populate it by
         # querying the policy.
         if len(self._action_queue) == 0:
-            actions = self.model(batch)[0][:, : self.config.n_action_steps]
+            actions = self.model(batch)[0][:, : self.algo_config.n_action_steps]
 
             # TODO(rcadene): make _forward return output dictionary?
             actions = self.unnormalize_outputs({"action": actions})["action"]
@@ -131,13 +203,8 @@ class ACTPolicy(
             self._action_queue.extend(actions.transpose(0, 1))
         return self._action_queue.popleft()
 
-    def forward(self, batch: dict[str, Tensor]) -> dict[str, Tensor]:
+    def compute_loss(self, batch: dict[str, Tensor]) -> dict[str, Tensor]:
         """Run the batch through the model and compute the loss for training or validation."""
-        batch = self.normalize_inputs(batch)
-        if len(self.expected_image_keys) > 0:
-            batch = dict(batch)  # shallow copy so that adding a key doesn't modify the original
-            batch["observation.images"] = torch.stack([batch[k] for k in self.expected_image_keys], dim=-4)
-        batch = self.normalize_targets(batch)
         actions_hat, (mu_hat, log_sigma_x2_hat) = self.model(batch)
 
         l1_loss = (
@@ -145,7 +212,7 @@ class ACTPolicy(
         ).mean()
 
         loss_dict = {"l1_loss": l1_loss.item()}
-        if self.config.use_vae:
+        if self.algo_config.use_vae:
             # Calculate Dₖₗ(latent_pdf || standard_normal). Note: After computing the KL-divergence for
             # each dimension independently, we sum over the latent dimension to get the total
             # KL-divergence per batch element, then take the mean over the batch.
@@ -154,7 +221,7 @@ class ACTPolicy(
                 (-0.5 * (1 + log_sigma_x2_hat - mu_hat.pow(2) - (log_sigma_x2_hat).exp())).sum(-1).mean()
             )
             loss_dict["kld_loss"] = mean_kld.item()
-            loss_dict["loss"] = l1_loss + mean_kld * self.config.kl_weight
+            loss_dict["loss"] = l1_loss + mean_kld * self.algo_config.kl_weight
         else:
             loss_dict["loss"] = l1_loss
 
@@ -287,85 +354,61 @@ class ACT(nn.Module):
                                 └───────────────────────┘
     """
 
-    def __init__(self, config: ACTConfig):
+    def __init__(self, algo_config: ACTConfig):
         super().__init__()
-        self.config = config
+        self.algo_config = algo_config
+
+        # default value for vae_state_keys are all low_dim keys  # I love semantics
+        if 'vae_state_keys' not in asdict(algo_config) or algo_config.vae_state_keys is None:
+            self.vae_state_shapes = filter_modality(algo_config.input_shapes, modality='low_dim')
+        else:
+            self.vae_state_shapes = algo_config.vae_state_keys
+        self._any_obs_key = list(algo_config.input_shapes)[0]
+
         # BERT style VAE encoder with input tokens [cls, robot_state, *action_sequence].
         # The cls token forms parameters of the latent's distribution (like this [*means, *log_variances]).
-        self.use_robot_state = "observation.state" in config.input_shapes
-        self.use_images = any(k.startswith("observation.image") for k in config.input_shapes)
-        self.use_env_state = "observation.environment_state" in config.input_shapes
-        if self.config.use_vae:
-            self.vae_encoder = ACTEncoder(config, is_vae_encoder=True)
-            self.vae_encoder_cls_embed = nn.Embedding(1, config.dim_model)
-            # Projection layer for joint-space configuration to hidden dimension.
-            if self.use_robot_state:
-                self.vae_encoder_robot_state_input_proj = nn.Linear(
-                    config.input_shapes["observation.state"][0], config.dim_model
-                )
-            # Projection layer for action (joint-space target) to hidden dimension.
+
+        if self.algo_config.use_vae:
+            if self.vae_state_shapes:
+                self.vae_state_encoder = encoder_factory(
+                    obs_shapes=self.vae_state_shapes,
+                    feature_dim=algo_config.dim_model,
+                    feature_aggregation='sequence'
+                )  # returns (B, S, algo_config.dim_model)
+
+            self.vae_encoder = ACTEncoder(algo_config, is_vae_encoder=True)
+            self.vae_encoder_cls_embed = nn.Embedding(1, algo_config.dim_model)
+
+            # Pooling layer for action (joint-space target) to hidden dimension.
             self.vae_encoder_action_input_proj = nn.Linear(
-                config.output_shapes["action"][0], config.dim_model
+                algo_config.output_shapes["action"][0], algo_config.dim_model
             )
-            # Projection layer from the VAE encoder's output to the latent distribution's parameter space.
-            self.vae_encoder_latent_output_proj = nn.Linear(config.dim_model, config.latent_dim * 2)
+            # Pooling layer from the VAE encoder's output to the latent distribution's parameter space.
+            self.vae_encoder_latent_output_proj = nn.Linear(algo_config.dim_model, algo_config.latent_dim * 2)
             # Fixed sinusoidal positional embedding for the input to the VAE encoder. Unsqueeze for batch
             # dimension.
-            num_input_token_encoder = 1 + config.chunk_size
-            if self.use_robot_state:
-                num_input_token_encoder += 1
+            num_input_token_encoder = 1 + algo_config.chunk_size + len(self.vae_state_shapes)
             self.register_buffer(
                 "vae_encoder_pos_enc",
-                create_sinusoidal_pos_embedding(num_input_token_encoder, config.dim_model).unsqueeze(0),
+                create_sinusoidal_pos_embedding(num_input_token_encoder, algo_config.dim_model).unsqueeze(0),
             )
-
-        # Backbone for image feature extraction.
-        if self.use_images:
-            backbone_model = getattr(torchvision.models, config.vision_backbone)(
-                replace_stride_with_dilation=[False, False, config.replace_final_stride_with_dilation],
-                weights=config.pretrained_backbone_weights,
-                norm_layer=FrozenBatchNorm2d,
-            )
-            # Note: The assumption here is that we are using a ResNet model (and hence layer4 is the final
-            # feature map).
-            # Note: The forward method of this returns a dict: {"feature_map": output}.
-            self.backbone = IntermediateLayerGetter(backbone_model, return_layers={"layer4": "feature_map"})
 
         # Transformer (acts as VAE decoder when training with the variational objective).
-        self.encoder = ACTEncoder(config)
-        self.decoder = ACTDecoder(config)
-
-        # Transformer encoder input projections. The tokens will be structured like
-        # [latent, (robot_state), (env_state), (image_feature_map_pixels)].
-        if self.use_robot_state:
-            self.encoder_robot_state_input_proj = nn.Linear(
-                config.input_shapes["observation.state"][0], config.dim_model
-            )
-        if self.use_env_state:
-            self.encoder_env_state_input_proj = nn.Linear(
-                config.input_shapes["observation.environment_state"][0], config.dim_model
-            )
-        self.encoder_latent_input_proj = nn.Linear(config.latent_dim, config.dim_model)
-        if self.use_images:
-            self.encoder_img_feat_input_proj = nn.Conv2d(
-                backbone_model.fc.in_features, config.dim_model, kernel_size=1
-            )
-        # Transformer encoder positional embeddings.
-        n_1d_tokens = 1  # for the latent
-        if self.use_robot_state:
-            n_1d_tokens += 1
-        if self.use_env_state:
-            n_1d_tokens += 1
-        self.encoder_1d_feature_pos_embed = nn.Embedding(n_1d_tokens, config.dim_model)
-        if self.use_images:
-            self.encoder_cam_feat_pos_embed = ACTSinusoidalPositionEmbedding2d(config.dim_model // 2)
+        algo_config.input_shapes['latent'] = (algo_config.latent_dim,)
+        self.obs_encoder = encoder_factory(
+            obs_shapes=algo_config.input_shapes,
+            feature_dim=algo_config.dim_model,
+            encoder_cls=ACTObsEncoder
+        )
+        self.encoder = ACTEncoder(algo_config)
+        self.decoder = ACTDecoder(algo_config)
 
         # Transformer decoder.
         # Learnable positional embedding for the transformer's decoder (in the style of DETR object queries).
-        self.decoder_pos_embed = nn.Embedding(config.chunk_size, config.dim_model)
+        self.decoder_pos_embed = nn.Embedding(algo_config.chunk_size, algo_config.dim_model)
 
         # Final action regression head on the output of the transformer's decoder.
-        self.action_head = nn.Linear(config.dim_model, config.output_shapes["action"][0])
+        self.action_head = nn.Linear(algo_config.dim_model, algo_config.output_shapes["action"][0])
 
         self._reset_parameters()
 
@@ -394,45 +437,41 @@ class ACT(nn.Module):
             Tuple containing the latent PDF's parameters (mean, log(σ²)) both as (B, L) tensors where L is the
             latent dimension.
         """
-        if self.config.use_vae and self.training:
+        if self.algo_config.use_vae and self.training:
             assert (
                 "action" in batch
             ), "actions must be provided when using the variational objective in training mode."
 
-        batch_size = (
-            batch["observation.images"]
-            if "observation.images" in batch
-            else batch["observation.environment_state"]
-        ).shape[0]
+        batch_size = batch[self._any_obs_key].shape[0]
 
         # Prepare the latent for input to the transformer encoder.
-        if self.config.use_vae and "action" in batch:
+        if self.algo_config.use_vae and "action" in batch:
             # Prepare the input to the VAE encoder: [cls, *joint_space_configuration, *action_sequence].
             cls_embed = einops.repeat(
                 self.vae_encoder_cls_embed.weight, "1 d -> b 1 d", b=batch_size
             )  # (B, 1, D)
-            if self.use_robot_state:
-                robot_state_embed = self.vae_encoder_robot_state_input_proj(batch["observation.state"])
-                robot_state_embed = robot_state_embed.unsqueeze(1)  # (B, 1, D)
+
             action_embed = self.vae_encoder_action_input_proj(batch["action"])  # (B, S, D)
 
-            if self.use_robot_state:
-                vae_encoder_input = [cls_embed, robot_state_embed, action_embed]  # (B, S+2, D)
+            if self.vae_state_shapes:
+                state_embed = self.vae_state_encoder(batch)  # (B, L, D)
+                state_embed = einops.rearrange(state_embed, 's b d -> b s d')
+                vae_encoder_input = [cls_embed, state_embed, action_embed]  # (B, L+S+1, D)
             else:
-                vae_encoder_input = [cls_embed, action_embed]
+                vae_encoder_input = [cls_embed, action_embed]  # (B, S+1, D)
             vae_encoder_input = torch.cat(vae_encoder_input, axis=1)
 
             # Prepare fixed positional embedding.
             # Note: detach() shouldn't be necessary but leaving it the same as the original code just in case.
-            pos_embed = self.vae_encoder_pos_enc.clone().detach()  # (1, S+2, D)
+            pos_embed = self.vae_encoder_pos_enc.clone().detach()  # (1, (L+)S+1, D)
 
             # Prepare key padding mask for the transformer encoder. We have 1 or 2 extra tokens at the start of the
             # sequence depending whether we use the input states or not (cls and robot state)
             # False means not a padding token.
             cls_joint_is_pad = torch.full(
-                (batch_size, 2 if self.use_robot_state else 1),
+                (batch_size, 1 + len(self.vae_state_shapes)),
                 False,
-                device=batch["observation.state"].device,
+                device=vae_encoder_input.device,
             )
             key_padding_mask = torch.cat(
                 [cls_joint_is_pad, batch["action_is_pad"]], axis=1
@@ -445,21 +484,24 @@ class ACT(nn.Module):
                 key_padding_mask=key_padding_mask,
             )[0]  # select the class token, with shape (B, D)
             latent_pdf_params = self.vae_encoder_latent_output_proj(cls_token_out)
-            mu = latent_pdf_params[:, : self.config.latent_dim]
+            mu = latent_pdf_params[:, : self.algo_config.latent_dim]
             # This is 2log(sigma). Done this way to match the original implementation.
-            log_sigma_x2 = latent_pdf_params[:, self.config.latent_dim :]
+            log_sigma_x2 = latent_pdf_params[:, self.algo_config.latent_dim :]
 
             # Sample the latent with the reparameterization trick.
-            latent_sample = mu + log_sigma_x2.div(2).exp() * torch.randn_like(mu)
+            batch['latent'] = mu + log_sigma_x2.div(2).exp() * torch.randn_like(mu)
         else:
             # When not using the VAE encoder, we set the latent to be all zeros.
             mu = log_sigma_x2 = None
             # TODO(rcadene, alexander-soare): remove call to `.to` to speedup forward ; precompute and use buffer
-            latent_sample = torch.zeros([batch_size, self.config.latent_dim], dtype=torch.float32).to(
-                batch["observation.state"].device
+            batch['latent'] = torch.zeros([batch_size, self.algo_config.latent_dim], dtype=torch.float32).to(
+                batch[self._any_obs_key].device
             )
 
         # Prepare transformer encoder inputs.
+        encoder_in_tokens, encoder_in_pos_embed = self.obs_encoder(batch)  # (S, B, D)
+        # replaces
+        """
         encoder_in_tokens = [self.encoder_latent_input_proj(latent_sample)]
         encoder_in_pos_embed = list(self.encoder_1d_feature_pos_embed.weight.unsqueeze(1))
         # Robot state token.
@@ -494,12 +536,13 @@ class ACT(nn.Module):
         # Stack all tokens along the sequence dimension.
         encoder_in_tokens = torch.stack(encoder_in_tokens, axis=0)
         encoder_in_pos_embed = torch.stack(encoder_in_pos_embed, axis=0)
+        """
 
         # Forward pass through the transformer modules.
         encoder_out = self.encoder(encoder_in_tokens, pos_embed=encoder_in_pos_embed)
         # TODO(rcadene, alexander-soare): remove call to `device` ; precompute and use buffer
         decoder_in = torch.zeros(
-            (self.config.chunk_size, batch_size, self.config.dim_model),
+            (self.algo_config.chunk_size, batch_size, self.algo_config.dim_model),
             dtype=encoder_in_pos_embed.dtype,
             device=encoder_in_pos_embed.device,
         )
@@ -516,6 +559,63 @@ class ACT(nn.Module):
         actions = self.action_head(decoder_out)
 
         return actions, (mu, log_sigma_x2)
+
+
+class ACTObsEncoder(ObservationEncoder):
+    def __init__(self, **kwargs):
+        kwargs['feature_aggregation'] = 'sequence'
+        super().__init__(**kwargs)
+
+    def make(self):
+        super().make()
+
+        # store position embedding for each output shape
+        for name, out_shape in self.out_shapes.items():
+            attr_name = f'{name}_pos_embed'
+            if len(out_shape) == 1:
+                self.__setattr__(attr_name, nn.Embedding(1, self.feature_dim).weight)
+            elif len(out_shape) == 2:  # a vision transformer
+                self.__setattr__(attr_name, torch.zeros_like(out_shape))
+            elif len(out_shape) == 3:  # feature map (e.g., ResNet without pooling)
+                self.__setattr__(attr_name, ACTSinusoidalPositionEmbedding2d(self.feature_dim // 2))
+
+    def forward(self, obs_dict):
+        assert self._locked, "ACTObsEncoder: @make has not been called yet"
+
+        # ensure all modalities that the encoder handles are present
+        assert set(self.in_shapes.keys()).issubset(obs_dict), \
+            f"ObservationEncoder: {list(obs_dict.keys())} does not contain all modalities {list(self.in_shapes.keys())}"
+
+        # process keys in order given by @self.in_shapes
+        features = []  # (@self.n_tokens, b, self.feature_dim)
+        embeddings = []
+        for key in self.in_shapes:
+
+            # process obs with pooling layer
+            x = self.backbone(key=key, x=obs_dict[key])
+
+            x = self.final_layer(key=key, x=x)
+
+            x, p = self.pos_embed(key, x=x)
+
+            features.extend(x)
+            embeddings.extend(p)
+
+        return torch.stack(features, dim=0), torch.stack(embeddings, dim=0)  # stack all tokens along the sequence dimension
+
+    def pos_embed(self, key, x):
+        p = getattr(self, f'{key}_pos_embed')
+        if callable(p):
+            p = p(x)
+        if len(x.shape) == 4:
+            x = einops.rearrange(x, "b c h w -> (h w) b c")
+
+            # todo: precompute this
+            p = einops.rearrange(p, "b c h w -> (h w) b c")
+        if len(x.shape) == 3:
+            return x, p
+        else:
+            return [x], [p]
 
 
 class ACTEncoder(nn.Module):

@@ -120,6 +120,7 @@ def train(cfg: Config, out_dir: str | None = None, job_name: str | None = None):
        shape_meta=offline_dataset.shape_meta,
        dataset_stats=offline_dataset.meta.stats
     )
+    algo.to(device)
     assert isinstance(algo, Algo)
 
     # create dataloader for offline training
@@ -153,10 +154,10 @@ def train(cfg: Config, out_dir: str | None = None, job_name: str | None = None):
 
     # Note: this helper will be used in offline and online training loops.
     def evaluate_and_checkpoint_if_needed(step, is_online):
-        _num_digits = max(6, len(str(cfg.training.offline_steps + cfg.training.online_steps)))
+        _num_digits = max(6, len(str(cfg.training.offline_steps)))
         step_identifier = f"{step:0{_num_digits}d}"
 
-        if cfg.training.eval_freq > 0 and step % cfg.training.eval_freq == 0:
+        if cfg.training.eval.enable and cfg.training.eval.frequency > 0 and step % cfg.training.eval.frequency == 0:
             logging.info(f"Eval policy at step {step}")
             with torch.no_grad(), torch.autocast(device_type=device.type) if cfg.algo.get('use_amp', False) else nullcontext():
                 assert eval_env is not None
@@ -173,9 +174,9 @@ def train(cfg: Config, out_dir: str | None = None, job_name: str | None = None):
                 logger.log_video(eval_info["video_paths"][0], step, mode="eval")
             logging.info("Resume training")
 
-        if cfg.training.save_checkpoint and (
-            step % cfg.training.save_freq == 0
-            or step == cfg.training.offline_steps + cfg.training.online_steps
+        if cfg.training.checkpoint.enable and (
+            step % cfg.training.checkpoint.frequency == 0
+            or step == cfg.training.offline_steps 
         ):
             logging.info(f"Checkpoint policy after step {step}")
             # Note: Save with step as the identifier, and format it to have at least 6 digits but more if
