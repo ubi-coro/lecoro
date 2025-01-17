@@ -8,23 +8,99 @@ import hydra
 import torch
 from deepdiff import DeepDiff
 from hydra_zen import instantiate
-from lerobot.scripts.train import log_train_info, log_eval_info, format_big_number, eval_policy
 from omegaconf import OmegaConf
 from termcolor import colored
 
-from coro.common.algo.algo import Algo
-from coro.common.config_gen import Config, register_configs
-from coro.common.dataset.lecoro_dataset import LeCoroDataset
-from coro.common.logger import Logger
-from coro.common.utils.dataset_utils import MultiLeRobotDataset, cycle
-from coro.common.utils.hydra_utils import init_hydra_config
-from coro.common.utils.log_utils import init_logging, log_output_dir
-from coro.common.utils.obs_utils import initialize_obs_utils_with_config
-from coro.common.utils.script_utils import set_global_seed
-from coro.common.utils.tensor_utils import to_device
-from coro.common.utils.torch_utils import get_safe_torch_device
+from lecoro.common.algo.algo_protocol import Algo
+from lecoro.common.algo.factory import make_algo
+from lecoro.common.config_gen import Config, register_configs
+from lecoro.common.datasets.lecoro_dataset import LeCoroDataset
+from lecoro.common.logger import Logger, log_output_dir
+from lecoro.common.datasets.lerobot_dataset import MultiLeRobotDataset
+from lecoro.common.datasets.utils import cycle
+from lecoro.common.utils.utils import init_hydra_config
+from lecoro.scripts.eval import eval_algo
+
+from lerobot.common.utils.utils import format_big_number, init_logging
+from lecoro.common.utils.obs_utils import initialize_obs_utils_with_config
+from lecoro.common.utils.utils import set_global_seed
+from lecoro.common.utils.tensor_utils import to_device
+from lecoro.common.utils.torch_utils import get_safe_torch_device
 
 register_configs()
+
+
+def log_train_info(logger: Logger, info, step, cfg, dataset, is_online):
+    loss = info["loss"]
+    grad_norm = info["grad_norm"]
+    lr = info["lr"]
+    update_s = info["update_s"]
+    dataloading_s = info["dataloading_s"]
+
+    # A sample is an (observation,action) pair, where observation and action
+    # can be on multiple timestamps. In a batch, we have `batch_size`` number of samples.
+    num_samples = (step + 1) * cfg.training.batch_size
+    avg_samples_per_ep = dataset.num_frames / dataset.num_episodes
+    num_episodes = num_samples / avg_samples_per_ep
+    num_epochs = num_samples / dataset.num_frames
+    log_items = [
+        f"step:{format_big_number(step)}",
+        # number of samples seen during training
+        f"smpl:{format_big_number(num_samples)}",
+        # number of episodes seen during training
+        f"ep:{format_big_number(num_episodes)}",
+        # number of time all unique samples are seen
+        f"epch:{num_epochs:.2f}",
+        f"loss:{loss:.3f}",
+        f"grdn:{grad_norm:.3f}",
+        f"lr:{lr:0.1e}",
+        # in seconds
+        f"updt_s:{update_s:.3f}",
+        f"data_s:{dataloading_s:.3f}",  # if not ~0, you are bottlenecked by cpu or io
+    ]
+    logging.info(" ".join(log_items))
+
+    info["step"] = step
+    info["num_samples"] = num_samples
+    info["num_episodes"] = num_episodes
+    info["num_epochs"] = num_epochs
+    info["is_online"] = is_online
+
+    logger.log_dict(info, step, mode="train")
+
+
+def log_eval_info(logger, info, step, cfg, dataset, is_online):
+    eval_s = info["eval_s"]
+    avg_sum_reward = info["avg_sum_reward"]
+    pc_success = info["pc_success"]
+
+    # A sample is an (observation,action) pair, where observation and action
+    # can be on multiple timestamps. In a batch, we have `batch_size`` number of samples.
+    num_samples = (step + 1) * cfg.training.batch_size
+    avg_samples_per_ep = dataset.num_frames / dataset.num_episodes
+    num_episodes = num_samples / avg_samples_per_ep
+    num_epochs = num_samples / dataset.num_frames
+    log_items = [
+        f"step:{format_big_number(step)}",
+        # number of samples seen during training
+        f"smpl:{format_big_number(num_samples)}",
+        # number of episodes seen during training
+        f"ep:{format_big_number(num_episodes)}",
+        # number of time all unique samples are seen
+        f"epch:{num_epochs:.2f}",
+        f"∑rwrd:{avg_sum_reward:.3f}",
+        f"success:{pc_success:.1f}%",
+        f"eval_s:{eval_s:.3f}",
+    ]
+    logging.info(" ".join(log_items))
+
+    info["step"] = step
+    info["num_samples"] = num_samples
+    info["num_episodes"] = num_episodes
+    info["num_epochs"] = num_epochs
+    info["is_online"] = is_online
+
+    logger.log_dict(info, step, mode="eval")
 
 
 def train(cfg: Config, out_dir: str | None = None, job_name: str | None = None):
@@ -34,7 +110,6 @@ def train(cfg: Config, out_dir: str | None = None, job_name: str | None = None):
         raise NotImplementedError()
 
     init_logging()
-    logging.info(pformat(OmegaConf.to_container(cfg)))
 
     if cfg.resume:
         if not Logger.get_last_checkpoint_dir(out_dir).exists():
@@ -74,14 +149,14 @@ def train(cfg: Config, out_dir: str | None = None, job_name: str | None = None):
             "you meant to resume training, please use `resume=true` in your command or yaml configuration."
         )
 
-    if cfg.training.eval.batch_size > cfg.training.eval.n_episodes:
+    if cfg.eval.batch_size > cfg.eval.n_episodes:
         raise ValueError(
             "The eval batch size is greater than the number of eval episodes "
-            f"({cfg.training.eval.batch_size} > {cfg.eval.n_episodes}). As a result, {cfg.training.eval.batch_size} "
-            f"eval environments will be instantiated, but only {cfg.training.eval.n_episodes} will be used. "
+            f"({cfg.eval.batch_size} > {cfg.eval.n_episodes}). As a result, {cfg.eval.batch_size} "
+            f"eval environments will be instantiated, but only {cfg.eval.n_episodes} will be used. "
             "This might significantly slow down evaluation. To fix this, you should update your command "
-            f"to increase the number of episodes to match the batch size (e.g. `training.eval.n_episodes={cfg.training.eval.batch_size}`), "
-            f"or lower the batch size (e.g. `training.eval.batch_size={cfg.training.eval.n_episodes}`)."
+            f"to increase the number of episodes to match the batch size (e.g. `training.eval.n_episodes={cfg.eval.batch_size}`), "
+            f"or lower the batch size (e.g. `training.eval.batch_size={cfg.eval.n_episodes}`)."
         )
 
     # log metrics to terminal and wandb
@@ -109,16 +184,16 @@ def train(cfg: Config, out_dir: str | None = None, job_name: str | None = None):
     # On real-world data, no need to create an environment as evaluations are done outside train.py,
     # using the eval.py instead, with gym_dora environment and dora-rs.
     eval_env = None
-    if cfg.training.eval.enable:
+    if cfg.eval.enable:
         logging.info("make_env")
         eval_env = instantiate(cfg.env)
 
     # create algo that knows a lot about the observations its receiving
-    algo: Algo = instantiate(cfg.algo)()  # todo: look at why this gets instantiated as partial
-    algo.make(
-       obs_config=obs_config,
-       shape_meta=offline_dataset.shape_meta,
-       dataset_stats=offline_dataset.meta.stats
+    algo: Algo = make_algo(
+        cfg=cfg,
+        shape_meta=offline_dataset.shape_meta,
+        dataset_stats=offline_dataset.meta.stats if not cfg.resume else None,
+        pretrained_algo_name_or_path=str(logger.last_pretrained_model_dir) if cfg.resume else None
     )
     algo.to(device)
     assert isinstance(algo, Algo)
@@ -157,11 +232,11 @@ def train(cfg: Config, out_dir: str | None = None, job_name: str | None = None):
         _num_digits = max(6, len(str(cfg.training.offline_steps)))
         step_identifier = f"{step:0{_num_digits}d}"
 
-        if cfg.training.eval.enable and cfg.training.eval.frequency > 0 and step % cfg.training.eval.frequency == 0:
+        if cfg.eval.enable and cfg.eval.frequency > 0 and step % cfg.eval.frequency == 0:
             logging.info(f"Eval policy at step {step}")
             with torch.no_grad(), torch.autocast(device_type=device.type) if cfg.algo.get('use_amp', False) else nullcontext():
                 assert eval_env is not None
-                eval_info = eval_policy(
+                eval_info = eval_algo(
                     eval_env,
                     algo,
                     cfg.eval_n_episodes,
@@ -174,9 +249,9 @@ def train(cfg: Config, out_dir: str | None = None, job_name: str | None = None):
                 logger.log_video(eval_info["video_paths"][0], step, mode="eval")
             logging.info("Resume training")
 
-        if cfg.training.checkpoint.enable and (
-            step % cfg.training.checkpoint.frequency == 0
-            or step == cfg.training.offline_steps 
+        if cfg.checkpoint.enable and (
+            step % cfg.checkpoint.frequency == 0
+            or step == cfg.training.offline_steps
         ):
             logging.info(f"Checkpoint policy after step {step}")
             # Note: Save with step as the identifier, and format it to have at least 6 digits but more if
@@ -202,7 +277,7 @@ def train(cfg: Config, out_dir: str | None = None, job_name: str | None = None):
 
         train_info["dataloading_s"] = dataloading_s
 
-        if step % cfg.training.logging.frequency == 0:
+        if step % cfg.logging.frequency == 0:
             log_train_info(logger, train_info, step, cfg, offline_dataset.dataset, is_online=False)
 
         # Note: evaluate_and_checkpoint_if_needed happens **after** the `step`th training update has completed,
@@ -217,7 +292,7 @@ def train(cfg: Config, out_dir: str | None = None, job_name: str | None = None):
     logging.info("End of training")
 
 
-@hydra.main(version_base="1.2", config_name="train_offline", config_path="../config")
+@hydra.main(version_base="1.2", config_name="default", config_path="../config")
 def train_cli(cfg: dict):
     train(
         cfg,

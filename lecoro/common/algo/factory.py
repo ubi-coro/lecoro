@@ -16,10 +16,11 @@
 import inspect
 import logging
 
+from hydra_zen import get_target, instantiate
 from omegaconf import DictConfig, OmegaConf
 
-from lecoro.common.algo.algo_protocol import Policy
-from lecoro.common.utils.utils import get_safe_torch_device
+from lecoro.common.algo.algo_protocol import Algo
+from lecoro.common.config_gen import Config, ObsConfig
 
 
 def _policy_cfg_from_hydra_cfg(policy_cfg_class, hydra_cfg):
@@ -44,68 +45,43 @@ def _policy_cfg_from_hydra_cfg(policy_cfg_class, hydra_cfg):
     return policy_cfg
 
 
-def get_policy_and_config_classes(name: str) -> tuple[Policy, object]:
-    """Get the policy's class and config class given a name (matching the policy class' `name` attribute)."""
-    if name == "tdmpc":
-        from lecoro.common.algo.tdmpc.configuration_tdmpc import TDMPCConfig
-        from lecoro.common.algo.tdmpc.modeling_tdmpc import TDMPCPolicy
-
-        return TDMPCPolicy, TDMPCConfig
-    elif name == "diffusion":
-        from lecoro.common.algo.diffusion.configuration_diffusion import DiffusionConfig
-        from lecoro.common.algo.diffusion.modeling_diffusion import DiffusionPolicy
-
-        return DiffusionPolicy, DiffusionConfig
-    elif name == "act":
-        from lecoro.common.algo.act.configuration_act import ACTConfig
-        from lecoro.common.algo.act.modeling_act import ACTPolicy
-
-        return ACTPolicy, ACTConfig
-    elif name == "vqbet":
-        from lecoro.common.algo.vqbet.configuration_vqbet import VQBeTConfig
-        from lecoro.common.algo.vqbet.modeling_vqbet import VQBeTPolicy
-
-        return VQBeTPolicy, VQBeTConfig
-    else:
-        raise NotImplementedError(f"Policy with name {name} is not implemented.")
-
-
-def make_policy(
-    hydra_cfg: DictConfig, pretrained_policy_name_or_path: str | None = None, dataset_stats=None
-) -> Policy:
-    """Make an instance of a policy class.
+def make_algo(
+    cfg: Config,
+    shape_meta: dict[str, tuple[int]] | None = None,
+    pretrained_algo_name_or_path: str | None = None,
+    dataset_stats=None
+) -> Algo:
+    """Make an instance of a algo class.
 
     Args:
-        hydra_cfg: A parsed Hydra configuration (see scripts). If `pretrained_policy_name_or_path` is
-            provided, only `hydra_cfg.policy.name` is used while everything else is ignored.
-        pretrained_policy_name_or_path: Either the repo ID of a model hosted on the Hub or a path to a
+        cfg: A parsed Hydra configuration (see scripts). If `pretrained_algo_name_or_path` is
+            provided, only `hydra_cfg.algo._target_` is used while everything else is ignored.
+        shape_meta: A dictionary mapping observation keys to their expected shapes.
+        pretrained_algo_name_or_path: Either the repo ID of a model hosted on the Hub or a path to a
             directory containing weights saved using `Policy.save_pretrained`. Note that providing this
-            argument overrides everything in `hydra_cfg.policy` apart from `hydra_cfg.policy.name`.
-        dataset_stats: Dataset statistics to use for (un)normalization of inputs/outputs in the policy. Must
-            be provided when initializing a new policy, and must not be provided when loading a pretrained
-            policy. Therefore, this argument is mutually exclusive with `pretrained_policy_name_or_path`.
+            argument overrides everything in `hydra_cfg.algo` apart from `hydra_cfg.algo.name`.
+        dataset_stats: Dataset statistics to use for (un)normalization of inputs/outputs in the algo. Must
+            be provided when initializing a new algo, and must not be provided when loading a pretrained
+            algo. Therefore, this argument is mutually exclusive with `pretrained_algo_name_or_path`.
     """
-    if not (pretrained_policy_name_or_path is None) ^ (dataset_stats is None):
+    if not (pretrained_algo_name_or_path is None) ^ (shape_meta is None or dataset_stats is None):
         raise ValueError(
-            "Exactly one of `pretrained_policy_name_or_path` and `dataset_stats` must be provided."
+            "Exactly one of `pretrained_algo_name_or_path` and [`shape_meta`, `dataset_stats`]  must be provided."
         )
 
-    policy_cls, policy_cfg_class = get_policy_and_config_classes(hydra_cfg.policy.name)
-
-    policy_cfg = _policy_cfg_from_hydra_cfg(policy_cfg_class, hydra_cfg)
-    if pretrained_policy_name_or_path is None:
-        # Make a fresh policy.
-        policy = policy_cls(policy_cfg, dataset_stats)
+    if pretrained_algo_name_or_path is None:
+        # Make a fresh algo
+        algo = instantiate(cfg.algo, obs_config=cfg.observation, shape_meta=shape_meta, dataset_stats=dataset_stats)
     else:
-        # Load a pretrained policy and override the config if needed (for example, if there are inference-time
+        # Load a pretrained algo and override the config if needed (for example, if there are inference-time
         # hyperparameters that we want to vary).
-        # TODO(alexander-soare): This hack makes use of huggingface_hub's tooling to load the policy with,
-        # pretrained weights which are then loaded into a fresh policy with the desired config. This PR in
+        # TODO(alexander-soare): This hack makes use of huggingface_hub's tooling to load the algo with,
+        # pretrained weights which are then loaded into a fresh algo with the desired config. This PR in
         # huggingface_hub should make it possible to avoid the hack:
         # https://github.com/huggingface/huggingface_hub/pull/2274.
-        policy = policy_cls(policy_cfg)
-        policy.load_state_dict(policy_cls.from_pretrained(pretrained_policy_name_or_path).state_dict())
+        algo_cls = get_target(cfg.algo)
+        algo_pretrained: Algo = algo_cls.from_pretrained(pretrained_algo_name_or_path, obs_config=cfg.observation)
+        algo = instantiate(cfg.algo, shape_meta=algo_pretrained.config.shape_meta, obs_config=cfg.observation)
+        algo.load_state_dict(algo_pretrained.state_dict())
 
-    policy.to(get_safe_torch_device(hydra_cfg.device))
-
-    return policy
+    return algo

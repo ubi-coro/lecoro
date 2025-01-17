@@ -678,7 +678,7 @@ This file is used to instantiate your robot in all our scripts. We will explain 
 
 ### d. Use `koch.yaml` and our `teleoperate` function
 
-Instead of manually running the python code in a terminal window, you can use [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot.py) to instantiate your robot by providing the path to the robot yaml file (e.g. [`lerobot/configs/robot/koch.yaml`](../lecoro/configs/robot/koch.yaml)) and control your robot with various modes as explained next.
+Instead of manually running the python code in a terminal window, you can use [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot_old.py) to instantiate your robot by providing the path to the robot yaml file (e.g. [`lerobot/configs/robot/koch.yaml`](../lecoro/configs/robot/koch.yaml)) and control your robot with various modes as explained next.
 
 Try running this code to teleoperate your robot (if you dont have a camera, keep reading):
 ```bash
@@ -725,7 +725,7 @@ Try this code to record 30 seconds at 60 fps:
 
 ```python
 import time
-from lecoro.scripts.control_robot import busy_wait
+from lecoro.scripts.control_robot_old import busy_wait
 
 record_time_s = 30
 fps = 60
@@ -751,7 +751,7 @@ Importantly, many utilities are still missing. For instance, if you have cameras
 
 ### a. Use `koch.yaml` and the `record` function
 
-You can use the `record` function from [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot.py) to achieve efficient data recording. It encompasses many recording utilities:
+You can use the `record` function from [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot_old.py) to achieve efficient data recording. It encompasses many recording utilities:
 1. Frames from cameras are saved on disk in threads, and encoded into videos at the end of recording.
 2. Video streams from cameras are displayed in window so that you can verify them.
 3. Data is stored with [`LeRobotDataset`](../lecoro/common/datasets/lerobot_dataset.py) format which is pushed to your Hugging Face page (unless `--push-to-hub 0` is provided).
@@ -854,7 +854,7 @@ This will launch a local web server that looks like this:
 
 ### d. Replay episode on your robot with the `replay` function
 
-A useful feature of [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot.py) is the `replay` function, which allows to replay on your robot any episode that you've recorded or episodes from any dataset out there. This function helps you test the repeatability of your robot's actions and assess transferability across robots of the same model.
+A useful feature of [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot_old.py) is the `replay` function, which allows to replay on your robot any episode that you've recorded or episodes from any dataset out there. This function helps you test the repeatability of your robot's actions and assess transferability across robots of the same model.
 
 To replay the first episode of the dataset you just recorded, run the following command:
 ```bash
@@ -988,7 +988,7 @@ for _ in range(inference_time_s * fps):
 
 Ideally, when controlling your robot with your neural network, you would want to record evaluation episodes and to be able to visualize them later on, or even train on them like in Reinforcement Learning. This pretty much corresponds to recording a new dataset but with a neural network providing the actions instead of teleoperation.
 
-To this end, you can use the `record` function from [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot.py) but with a policy checkpoint as input. For instance, run this command to record 10 evaluation episodes:
+To this end, you can use the `record` function from [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot_old.py) but with a policy checkpoint as input. For instance, run this command to record 10 evaluation episodes:
 ```bash
 python lecoro/scripts/control_robot.py record \
   --robot-path lecoro/configs/robot/koch.yaml \

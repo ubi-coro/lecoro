@@ -1,12 +1,13 @@
 defaults:
   - dataset/key_formatter: remove_prefix
 
+offline_steps: 5
 batch_size: 4
 num_workers: 0
 device: cpu
 
 dataset:
-  _target_: coro.common.dataset.lecoro_dataset.LeCoroDataset
+  _target_: lecoro.common.datasets.lecoro_dataset.LeCoroDataset
   root: ${root}/datasets/${dataset_repo_id}
   repo_id: ${dataset_repo_id}
   episodes: null  # all

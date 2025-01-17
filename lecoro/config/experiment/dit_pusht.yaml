@@ -1,0 +1,12 @@
+# @package _global_
+
+defaults:
+  - override /algo: dit
+  - override /env: pusht
+  - override /observation: pusht
+  - _self_
+
+dataset_repo_id: lerobot/pusht_image
+
+checkpoint:
+  frequency: 2

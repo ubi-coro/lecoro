@@ -1,5 +1,0 @@
-_target_: coro.common.utils.record_utils.BaseRecorder
-
-num_episodes: .inf
-
-

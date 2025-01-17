@@ -9,9 +9,7 @@ import einops
 import torch
 import torch.nn as nn
 
-import coro.common.utils.obs_utils as ObsUtils
-from coro.common.model.encoder.randomizer import Randomizer
-from coro.common.model.encoder.pooling import Pooling, Flatten
+import lecoro.common.utils.obs_utils as ObsUtils
 
 
 def compose_encoder_overwrites(key, overwrites):
@@ -21,7 +19,7 @@ def compose_encoder_overwrites(key, overwrites):
 class ObservationEncoder(nn.Module):
     """for any given observation outputs 2d features of the form [@n_tokens, @feature_dim]"""
 
-    def __init__(self, feature_dim: int = None, feature_aggregation: Literal['concat', 'mean', 'sequence'] = 'flatten'):
+    def __init__(self, feature_dim: int = None, feature_aggregation: Literal['concat', 'mean', 'sequence'] = 'flatten', **aggregation_kwargs):
         assert feature_dim is not None or feature_aggregation == 'concat', \
             f"ObservationEncoder: 'feature_dim' can only be None if feature_aggregation='concat', but got '{feature_aggregation}'"
         super().__init__()
@@ -29,10 +27,16 @@ class ObservationEncoder(nn.Module):
 
         if feature_aggregation == 'concat':
             self._aggregation = _concat
+            self._order = 1  # order of the output tensor
         elif feature_aggregation == 'mean':
             self._aggregation = _mean
+            self._order = 1
         elif feature_aggregation == 'sequence':
             self._aggregation = _sequence
+            self._order = 2
+        elif feature_aggregation == 'dit':
+            self._aggregation = dit_tokenizer(**aggregation_kwargs).tokenize
+            self._order = 2
         else:
             raise ValueError(f"ObservationEncoder: Unknown 'feature_aggregation' {feature_aggregation}")
 
@@ -47,7 +51,6 @@ class ObservationEncoder(nn.Module):
 
         self.feature_dim = feature_dim
         self.feature_aggregation = feature_aggregation
-        self._order = 2 if feature_aggregation == 'sequence' else 1  # order of the output tensor
 
     def register_obs_key(
             self,
@@ -56,6 +59,7 @@ class ObservationEncoder(nn.Module):
             backbone=None,
             backbone_kwargs=None,
 
+            dropout=None,
             pooling=None,
             pooling_kwargs=None,
 
@@ -74,8 +78,13 @@ class ObservationEncoder(nn.Module):
 
         backbone, randomizers, out_shape = self._build_backbone(shape, backbone, backbone_kwargs, randomizers, share_backbone_from)
 
-        # add pooling layers to match self.feature_dim, add normalization and non-linearity
+        from lecoro.common.algo.encoder.pooling import Flatten, Pooling
         layers = []
+
+        if dropout is not None:
+            layers.append(nn.Dropout(dropout))
+
+        # add pooling layers to match self.feature_dim, add normalization and non-linearity
         if len(out_shape) == 3:  # backbone outputs a feature map [D, H, W]
             if self._order == 2:  # [D, H, W] -> [@feature_dim, H, W], will use einops during inference to get [H * W, @feature_dim]
                 layers.append(nn.Conv2d(out_shape[0], self.feature_dim, kernel_size=1))
@@ -180,6 +189,8 @@ class ObservationEncoder(nn.Module):
             x = self.final_layer(key=key, x=x)
 
             if len(x.shape) == 4:
+                # Stacking along height and width dim for
+                # image output, such as in ACT.
                 x = einops.rearrange(x, "b c h w -> (h w) b c")
             if len(x.shape) == 3:
                 features.extend(x)
@@ -201,6 +212,14 @@ class ObservationEncoder(nn.Module):
             return [self.feature_dim]
         elif self.feature_aggregation == 'concat':
             return [sum([shape[0] for name, shape in self.out_shapes.items()])]
+        elif self.feature_aggregation == 'dit':
+            n_tokens = sum([shape[1] * shape[2] for name, shape in self.out_shapes.items() if len(shape) == 3])
+            n_tokens += sum([shape[0] for name, shape in self.out_shapes.items() if len(shape) == 2])
+            n_tokens += sum([1 for name, shape in self.out_shapes.items() if len(shape) == 1])
+            if self.feature_aggregation.__self__.flatten:
+                return [n_tokens * self.feature_dim]
+            else:
+                return [n_tokens, self.feature_dim]
 
     def backbone(self, key, x):
         # maybe process encoder input with randomizer
@@ -239,6 +258,7 @@ class ObservationEncoder(nn.Module):
             backbone_kwargs = dict()
 
         # handle randomizer
+        from lecoro.common.algo.encoder.randomizer import Randomizer
         out_shape = shape
         if randomizers is not None:
             randomizers = randomizers if isinstance(randomizers, list) else [randomizers]  # might not be list
@@ -258,8 +278,6 @@ class ObservationEncoder(nn.Module):
             out_shape = backbone.output_shape(input_shape=out_shape)
 
         return backbone, randomizers, out_shape
-
-
 
     def __repr__(self):
         """
@@ -286,7 +304,8 @@ def encoder_factory(
         feature_dim: int | None = None,
         feature_aggregation: Literal['concat', 'mean', 'sequence'] = 'concat',
         encoder_cls: ObservationEncoder = ObservationEncoder,
-        encoder_overwrites: Optional['OverwriteConfig'] = None
+        encoder_overwrites: Optional['OverwriteConfig'] = None,
+        **encoder_kwargs
 ):
     """
     Utility function to create an @ObservationEncoder from kwargs specified in config.
@@ -294,7 +313,7 @@ def encoder_factory(
     if encoder_overwrites is None:
         encoder_overwrites = dict()
 
-    enc = encoder_cls(feature_dim=feature_dim, feature_aggregation=feature_aggregation)
+    enc = encoder_cls(feature_dim=feature_dim, feature_aggregation=feature_aggregation, **encoder_kwargs)
     assert isinstance(enc, ObservationEncoder)
 
     for k, obs_shape in obs_shapes.items():
@@ -304,6 +323,7 @@ def encoder_factory(
             name=k,
             shape=obs_shape,
             backbone=ObsUtils.DEFAULT_BACKBONES[obs_modality],
+            dropout=ObsUtils.DEFAULT_DROPOUT[obs_modality],
             pooling=ObsUtils.DEFAULT_POOLINGS[obs_modality],
             activation=ObsUtils.DEFAULT_ACTIVATIONS[obs_modality],
             randomizers=ObsUtils.DEFAULT_RANDOMIZERS[obs_modality]
@@ -328,3 +348,42 @@ def _sequence(features: list[torch.Tensor]) -> torch.Tensor:
 
 def _mean(features: list[torch.Tensor]) -> torch.Tensor:
     return _sequence(features).mean(0)
+
+class dit_tokenizer(nn.Module):
+    def __init__(self, dropout: float = 0.2, feat_norm: str | None = None, flatten: bool = False):
+        super().__init__()
+
+        # build feature normalization layers
+        if feat_norm == "batch_norm":
+            norm = _BatchNorm1DHelper(self._token_dim)
+        elif feat_norm == "layer_norm":
+            norm = nn.LayerNorm(self._token_dim)
+        else:
+            assert feat_norm is None
+            norm = nn.Identity()
+
+        # final token post proc network
+        self.norm = nn.Sequential(norm, nn.Dropout(dropout))
+        self.dropout = nn.Dropout(dropout)
+        self.flatten = flatten
+
+    def tokenize(self, features: list[torch.Tensor]) -> torch.Tensor:
+        features = einops.rearrange(_sequence(features), 't b d -> b t d')
+
+        features = self.dropout(self.norm(features))
+        if self.flatten:
+            features = einops.rearrange(features, 'b t d -> b (t d)')
+        return features
+
+
+class _BatchNorm1DHelper(nn.BatchNorm1d):
+    def forward(self, x):
+        if len(x.shape) == 3:
+            x = x.transpose(1, 2)
+            x = super().forward(x)
+            return x.transpose(1, 2)
+        return super().forward(x)
+
+
+
+

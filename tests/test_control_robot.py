@@ -32,7 +32,7 @@ import pytest
 from lecoro.common.logger import Logger
 from lecoro.common.algo.factory import make_policy
 from lecoro.common.utils.utils import init_hydra_config
-from lecoro.scripts.control_robot import calibrate, record, replay, teleoperate
+from lecoro.scripts.control_robot_old import calibrate, record, replay, teleoperate
 from lecoro.scripts.train import make_optimizer_and_scheduler
 from tests.test_robots import make_robot
 from tests.utils import DEFAULT_CONFIG_PATH, DEVICE, TEST_ROBOT_TYPES, mock_calibration_dir, require_robot

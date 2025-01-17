@@ -15,6 +15,8 @@
 # limitations under the License.
 from dataclasses import dataclass, field
 
+# we keep this the same to avoid conflicts when importing lerobot specs
+
 
 @dataclass
 class ACTConfig:

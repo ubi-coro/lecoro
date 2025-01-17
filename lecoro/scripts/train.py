@@ -38,8 +38,7 @@ from lecoro.common.datasets.sampler import EpisodeAwareSampler
 from lecoro.common.datasets.utils import cycle
 from lecoro.common.envs.factory import make_env
 from lecoro.common.logger import Logger, log_output_dir
-from lecoro.common.algo.factory import make_policy
-from lecoro.common.algo.algo_protocol import PolicyWithUpdate
+from lecoro.common.algo.factory import make_algo
 from lecoro.common.algo.utils import get_device_from_parameters
 from lecoro.common.utils.utils import (
     format_big_number,

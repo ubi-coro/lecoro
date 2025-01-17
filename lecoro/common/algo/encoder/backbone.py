@@ -10,8 +10,8 @@ from timm.models.vision_transformer import resize_pos_embed
 from torchvision import models as vision_models
 from torchvision import transforms
 
-from coro.common.config_gen.encoder import register_backbone
-from coro.common.model.base_nets import CoordConv2d, ShallowConv
+from lecoro.common.algo.encoder.config_gen import register_backbone
+from lecoro.common.algo.base_nets import CoordConv2d, ShallowConv
 
 
 """

@@ -1,5 +1,9 @@
+import datetime
+import functools
 import re
+from pathlib import Path
 
+import hydra
 from hydra_zen import make_config, builds, ZenField, MISSING
 
 
@@ -10,6 +14,26 @@ def return_none():
 
 
 none = builds(return_none)
+
+
+def resolve_ts() -> str:
+    return datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+
+
+def resolve_debug_suffix(is_debug: bool) -> str:
+    if is_debug:
+        return '-debug'
+    else:
+        return ''
+
+
+def resolve_overrides_and_ts() -> str:
+    """
+    def _resolver(cfg: Config):
+        return f'{get_hydra_overrides()}_{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}'
+    return _resolver()
+    """
+    return f'[{get_hydra_overrides()}]_{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}'
 
 
 def to_snake_case(s):
@@ -30,8 +54,25 @@ def build_nested_dataclass_config(config, hydra_defaults):
 
 
 def build_config_from_instance(instance):
-    instance_dict = instance.__dict__
-    return builds(instance.__class__, **instance_dict, zen_partial=True, populate_full_signature=True)
+    if instance is None:
+        return none
+
+    if isinstance(instance, functools.partial):
+        return builds(
+            instance.func,  # The function being partially applied
+            *instance.args,  # Positional arguments
+            **instance.keywords,  # Keyword arguments
+            zen_partial=True,
+            populate_full_signature=True
+        )
+    else:
+        instance_dict = instance.__dict__
+        return builds(
+            instance.__class__,
+            **instance_dict,
+            zen_partial=True,
+            populate_full_signature=True
+        )
 
 
 def get_hydra_cwd() -> Path:

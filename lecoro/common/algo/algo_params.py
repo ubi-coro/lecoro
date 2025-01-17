@@ -1,8 +1,6 @@
-from dataclasses import dataclass, fields
-from functools import partial, wraps
-import inspect
-from typing import Any, Tuple, Optional
+from dataclasses import dataclass
 from hydra_zen import builds
+from typing import Any, Tuple, Optional
 
 import diffusers
 import torch.optim as optim
@@ -13,12 +11,11 @@ from diffusers.training_utils import EMAModel
 from diffusers.schedulers import SchedulerMixin
 from torch.optim.lr_scheduler import LambdaLR
 
-import coro.common.utils.algo_utils as AlgoUtils
-from coro.common.utils.config_utils import none
+from lecoro.common.utils.config_utils import none
 
 
 def register_configs():
-    from coro.common.config_gen.algo import NESTED_PARAM_TO_CHOICES, NESTED_PARAM_TO_DEFAULTS
+    from lecoro.common.algo.config_gen import NESTED_PARAM_TO_CHOICES, NESTED_PARAM_TO_DEFAULTS
     hydra_full = dict(populate_full_signature=True)
     hydra_partial = dict(zen_partial=True, **hydra_full)
     """
@@ -38,8 +35,6 @@ def register_configs():
     Store all learning rate schedulers
     ================================================
     """
-    #torch_wrapper = make_wrapper_with_any_params('T_max')
-    #diffusers_wrapper = make_wrapper_with_any_params('num_training_steps')
     NESTED_PARAM_TO_CHOICES[optim.lr_scheduler.LRScheduler] = {
         'cosine-annealing': builds(get_scheduler, name='cosine', num_training_steps='${...training.offline_steps}', num_warmup_steps=0, **hydra_partial),
         'cosine-with-warmup': builds(get_scheduler, name='cosine', num_training_steps='${...training.offline_steps}', num_warmup_steps=500, **hydra_partial),

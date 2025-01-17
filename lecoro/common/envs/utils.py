@@ -38,14 +38,14 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
             img = torch.from_numpy(img)
 
             # sanity check that images are channel last
-            _, h, w, c = img.shape
+            h, w, c = img.shape[-3:]
             assert c < h and c < w, f"expect channel last images, but instead got {img.shape=}"
 
             # sanity check that images are uint8
             assert img.dtype == torch.uint8, f"expect torch.uint8, but instead {img.dtype=}"
 
             # convert to channel first of type float32 in range [0,1]
-            img = einops.rearrange(img, "b h w c -> b c h w").contiguous()
+            img = einops.rearrange(img, "... h w c -> ... c h w").contiguous()
             img = img.type(torch.float32)
             img /= 255
 

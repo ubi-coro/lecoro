@@ -1,9 +1,0 @@
-defaults:
-  - experiment: default
-  - _self_
-
-hydra:
-  run:
-    # Set `dir` to where you would like to save all of the run outputs. If you run another training session
-    # with the same value for `dir` its contents will be overwritten unless you set `resume` to true.
-    dir: ${root}/outputs/record${debug-suffix:${debug}}/${now:%Y-%m-%d}/${now:%H-%M-%S}_${env.name}_${algo.name}_${hydra.job.name}

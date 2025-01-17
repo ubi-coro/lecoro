@@ -3,14 +3,14 @@ from dataclasses import dataclass
 from hydra_zen import MISSING
 
 @dataclass
-class BaseRecorderConfig:
+class DemonstrationRecorderConfig:
     root: str = MISSING
     dataset_repo_id: str = MISSING
-    name: str = MISSING
 
     episode_time_s: float = 10.0
     num_episodes: int = 50
     task: str | None = None
+    pretrained_algo_name_or_path: str | None = None
 
     resume: bool = False
     play_sounds: bool = True

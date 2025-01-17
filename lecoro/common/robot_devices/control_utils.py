@@ -16,14 +16,17 @@ import tqdm
 from deepdiff import DeepDiff
 from termcolor import colored
 
+from lecoro.common.config_gen import Config
 from lecoro.common.datasets.image_writer import safe_stop_image_writer
 from lecoro.common.datasets.lerobot_dataset import LeRobotDataset
 from lecoro.common.datasets.utils import get_features_from_robot
-from lecoro.common.algo.factory import make_policy
+from lecoro.common.algo.factory import make_algo
+from lecoro.common.utils.utils import log_say
 from lecoro.common.robot_devices.robots.utils import Robot
 from lecoro.common.robot_devices.utils import busy_wait
+from lecoro.common.utils.obs_utils import process_obs_dict
 from lecoro.common.utils.utils import get_safe_torch_device, init_hydra_config, set_global_seed
-from lecoro.scripts.eval import get_pretrained_policy_path
+from lecoro.scripts.eval import get_pretrained_algo_path
 
 
 def log_control_info(robot: Robot, dt_s, episode_index=None, frame_index=None, fps=None):
@@ -99,6 +102,9 @@ def predict_action(observation, policy, device, use_amp):
         torch.inference_mode(),
         torch.autocast(device_type=device.type) if device.type == "cuda" and use_amp else nullcontext(),
     ):
+        # should replace below
+        observation = process_obs_dict(observation)
+
         # Convert to pytorch format: channel first and float32 in [0,1] with batch dimension
         for name in observation:
             if "image" in name:
@@ -209,24 +215,24 @@ def sanity_check_dataset_compatibility(
         )
 
 
-def init_policy(pretrained_policy_name_or_path, policy_overrides):
-    """Instantiate the policy and load fps, device and use_amp from config yaml"""
-    pretrained_policy_path = get_pretrained_policy_path(pretrained_policy_name_or_path)
-    hydra_cfg = init_hydra_config(pretrained_policy_path / "config.yaml", policy_overrides)
-    policy = make_policy(hydra_cfg=hydra_cfg, pretrained_policy_name_or_path=pretrained_policy_path)
+def init_algo(pretrained_algo_name_or_path, algo_overrides):
+    """Instantiate the algo and load fps, device and use_amp from config yaml"""
+    pretrained_algo_path = get_pretrained_algo_path(pretrained_algo_name_or_path)
+    hydra_cfg: Config = init_hydra_config(pretrained_algo_path / "config.yaml", algo_overrides)
+    algo = make_algo(hydra_cfg=hydra_cfg, pretrained_algo_name_or_path=pretrained_algo_path)
 
     # Check device is available
     device = get_safe_torch_device(hydra_cfg.device, log=True)
-    use_amp = hydra_cfg.use_amp
-    policy_fps = hydra_cfg.env.fps
+    use_amp = hydra_cfg.algo.get('use_amp', False)
+    algo_fps = hydra_cfg.env.fps
 
-    policy.eval()
-    policy.to(device)
+    algo.eval()
+    algo.to(device)
 
     torch.backends.cudnn.benchmark = True
     torch.backends.cuda.matmul.allow_tf32 = True
     set_global_seed(hydra_cfg.seed)
-    return policy, policy_fps, device, use_amp
+    return algo, algo_fps, device, use_amp
 
 
 def warmup_record(

@@ -2,26 +2,22 @@
 A collection of utilities for working with observation dictionaries and
 different kinds of modalities such as images.
 """
-import copy
-
 import numpy as np
 from copy import deepcopy
 from typing import List, Dict, Any
-from dataclasses import fields
 from omegaconf import DictConfig
 from hydra_zen import instantiate
 import warnings
 
 import torch
-import gymnasium as gym
 
-from coro.common.config_gen.encoder import (
+from lecoro.common.algo.encoder.config_gen import (
     DEFAULT_BACKBONES,
+    DEFAULT_DROPOUT,
     DEFAULT_POOLINGS,
     DEFAULT_NORMS,
     DEFAULT_ACTIVATIONS,
-    DEFAULT_RANDOMIZERS,
-    register_obs_key
+    DEFAULT_RANDOMIZERS
 )
 import coro.common.utils.tensor_utils as TU
 
@@ -63,6 +59,11 @@ def filter_modality(obs_dict: dict[str, Any], modality: str | list[str]) -> dict
         key: obs for key, obs in obs_dict.items() if OBS_KEYS_TO_MODALITIES[key] in modality
     }
 
+
+def register_obs_key(target_class):
+    global OBS_MODALITY_CLASSES
+    assert target_class not in OBS_MODALITY_CLASSES, f"Already registered modality {target_class}!"
+    OBS_MODALITY_CLASSES[target_class.name] = target_class
 
 def is_image_key(key):
     """
@@ -210,6 +211,7 @@ def initialize_default_obs_encoder(obs_encoder_config: 'EncoderConfig'):
     """
     for modality, encoder_core in obs_encoder_config.items():
         DEFAULT_BACKBONES[modality] = encoder_core.backbone
+        DEFAULT_DROPOUT[modality] = encoder_core.dropout
         DEFAULT_POOLINGS[modality] = encoder_core.projection
         DEFAULT_NORMS[modality] = encoder_core.norm
         DEFAULT_ACTIVATIONS[modality] = encoder_core.activation
@@ -428,11 +430,13 @@ def process_frame(frame, channel_dim, scale):
         processed_frame (np.array or torch.Tensor): processed frame
     """
     # Channel size should either be 3 (RGB) or 1 (depth)
-    assert (frame.shape[-1] == channel_dim)
     frame = TU.to_float(frame)
     frame /= scale
     frame = frame.clip(0.0, 1.0)
-    frame = batch_image_hwc_to_chw(frame)
+
+    if frame.shape[-1] == channel_dim:
+        frame = batch_image_hwc_to_chw(frame)
+    assert (frame.shape[-3] == channel_dim)
 
     return frame
 

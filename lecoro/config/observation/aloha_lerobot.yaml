@@ -1,4 +1,3 @@
-# how to define modalities for different parts of the algorithm
 modalities:
   obs:
     low_dim: [ state ]

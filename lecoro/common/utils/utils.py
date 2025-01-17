@@ -185,6 +185,12 @@ def init_hydra_config(config_path: str, overrides: list[str] | None = None) -> D
         version_base="1.2",
     )
     cfg = hydra.compose(Path(config_path).stem, overrides)
+
+    # For some reason Hydra loses metadata about build types, even though it is still stored.
+    # This leads to unexpected type conversion when instantiating algos, so we manually add it back.
+    from lecoro.common.config_gen import ObsConfig
+    cfg.observation._metadata.object_type = ObsConfig
+
     return cfg
 
 

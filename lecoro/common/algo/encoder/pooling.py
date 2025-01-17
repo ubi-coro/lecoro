@@ -4,8 +4,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from coro.common.config_gen.encoder import register_projection
-from coro.common.utils.obs_utils import get_image_modalities
+from lecoro.common.algo.encoder.config_gen import register_projection
+from lecoro.common.utils.obs_utils import get_image_modalities
 
 
 class Pooling(nn.Module):

@@ -13,6 +13,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from typing import Optional, Sequence
+
+import numpy as np
 import torch
 from torch import nn
 
@@ -50,7 +53,7 @@ def get_dtype_from_parameters(module: nn.Module) -> torch.dtype:
 
 
 def action_dict_to_vector(
-        action_dict: Dict[str, np.ndarray],
+        action_dict: dict[str, np.ndarray],
         action_keys: Optional[Sequence[str]]=None) -> np.ndarray:
     if action_keys is None:
         action_keys = list(action_dict.keys())
@@ -62,8 +65,8 @@ def action_dict_to_vector(
 
 def vector_to_action_dict(
         action: np.ndarray,
-        action_shapes: Dict[str, Tuple[int]],
-        action_keys: Sequence[str]) -> Dict[str, np.ndarray]:
+        action_shapes: dict[str, tuple[int]],
+        action_keys: Sequence[str]) -> dict[str, np.ndarray]:
     action_dict = dict()
     start_idx = 0
     for key in action_keys:

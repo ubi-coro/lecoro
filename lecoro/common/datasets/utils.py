@@ -13,6 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import git
 import importlib.resources
 import json
 import logging
@@ -35,6 +36,7 @@ from PIL import Image as PILImage
 from torchvision import transforms
 
 from lecoro.common.robot_devices.robots.utils import Robot
+from lecoro.common.utils.obs_utils import OBS_KEYS_TO_MODALITIES
 
 DEFAULT_CHUNK_SIZE = 1000  # Max number of episodes per chunk
 
@@ -572,7 +574,7 @@ def add_modality_prefix(key: str) -> str:
     Returns:
         str: The key prefixed with its associated modality.
     """
-    return f'observation.{ObsUtils.OBS_KEYS_TO_MODALITIES[key]}.{key}'
+    return f'observation.{OBS_KEYS_TO_MODALITIES[key]}.{key}'
 
 
 def remove_modality_prefix(key: str, return_modality: bool = False) -> str:
@@ -581,6 +583,7 @@ def remove_modality_prefix(key: str, return_modality: bool = False) -> str:
 
     Args:
         key (str): The observation key with a modality prefix.
+        return_modality (bool): Wehther to return the removed modality as well
 
     Returns:
         str: The key without its modality prefix.

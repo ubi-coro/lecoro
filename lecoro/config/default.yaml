@@ -1,0 +1,42 @@
+defaults:
+  - /_template_  # structured config from coro.common.config_gen.register_configs for validation
+  - /algo: act
+  - /env: aloha
+  - /observation: aloha_v2
+  - /workspace: record_basic
+  - /training: basic_offline
+  - _self_
+
+resume: false
+seed: 42
+root: /home/${oc.env:USER}/lecoro/
+dataset_repo_id: lerobot/aloha_static_towel
+video_backend: pyav
+debug: false
+
+eval:
+  enable: false
+  frequency: 1000
+  batch_size: 50
+  n_episodes: 50
+
+checkpoint:
+  enable: true
+  frequency: 1000
+
+logging:
+  frequency: 100
+  enable_system_metrics_logging: true
+
+wandb:
+  enable: true
+  # Set to true to disable saving an artifact despite save_checkpoint == True
+  disable_artifact: false
+  project: ubi
+  notes: ""
+
+hydra:
+  run:
+    # Set `dir` to where you would like to save all of the run outputs. If you run another training session
+    # with the same value for `dir` its contents will be overwritten unless you set `resume` to true.
+    dir: ${root}/outputs/train${debug-suffix:${debug}}/${now:%Y-%m-%d}/${now:%H-%M-%S}_${algo.name}_${hydra.job.name}

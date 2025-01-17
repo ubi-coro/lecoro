@@ -10,11 +10,11 @@ import torch
 import torchvision.transforms.functional as TVF
 from torchvision.transforms import Lambda, Compose
 
-import coro.common.model.base_nets as BaseNets
-import coro.common.utils.obs_utils as ObsUtils
-import coro.common.utils.tensor_utils as TensorUtils
-from coro.common.config_gen.encoder import register_randomizer
-from coro.common.utils.vis_utils import visualize_image_randomizer
+import lecoro.common.algo.base_nets as BaseNets
+import lecoro.common.utils.obs_utils as ObsUtils
+import lecoro.common.utils.tensor_utils as TensorUtils
+from lecoro.common.algo.encoder.config_gen import register_randomizer
+from lecoro.common.utils.vis_utils import visualize_image_randomizer
 
 VISUALIZE_RANDOMIZER = False
 

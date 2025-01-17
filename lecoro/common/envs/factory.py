@@ -16,10 +16,11 @@
 import importlib
 
 import gymnasium as gym
-from omegaconf import DictConfig
+
+from lecoro.common.config_gen import Config
 
 
-def make_env(cfg: DictConfig, n_envs: int | None = None) -> gym.vector.VectorEnv | None:
+def make_env(cfg: Config, n_envs: int | None = None) -> gym.vector.VectorEnv | None:
     """Makes a gym vector environment according to the evaluation config.
 
     n_envs can be used to override eval.batch_size in the configuration. Must be at least 1.
@@ -47,12 +48,17 @@ def make_env(cfg: DictConfig, n_envs: int | None = None) -> gym.vector.VectorEnv
         gym_kwgs["max_episode_steps"] = cfg.env.episode_length
 
     # batched version of the env that returns an observation of shape (b, c)
-    env_cls = gym.vector.AsyncVectorEnv if cfg.eval.use_async_envs else gym.vector.SyncVectorEnv
+    env_cls = gym.vector.AsyncVectorEnv# if cfg.eval.use_async_envs else gym.vector.SyncVectorEnv
     env = env_cls(
         [
             lambda: gym.make(gym_handle, disable_env_checker=True, **gym_kwgs)
-            for _ in range(n_envs if n_envs is not None else cfg.eval.batch_size)
+            for _ in range(n_envs if n_envs is not None else 5)#cfg.eval.batch_size)
         ]
     )
+
+    #if cfg.algo.get('n_obs_steps', 0) > 0:
+    #    gym_maker = lambda: FrameStackObservation(gym.make(gym_handle, disable_env_checker=True, **gym_kwgs), stack_size=cfg.algo.n_obs_steps)
+    #else:
+    #    gym_maker = lambda: gym.make(gym_handle, disable_env_checker=True, **gym_kwgs)
 
     return env

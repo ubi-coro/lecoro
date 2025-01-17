@@ -1,7 +1,12 @@
 import inspect
-from hydra_zen import builds, store
+from dataclasses import dataclass
+from functools import partial
+from typing import Callable
 
-from coro.common.utils.config_utils import build_config_from_instance
+from hydra_zen import builds, store
+from torch.optim import Adam
+
+from lecoro.common.utils.config_utils import build_config_from_instance
 
 # DO NOT MODIFY, will be filled automatically by calling @register_configs
 
@@ -55,7 +60,8 @@ def register_param(param_name, is_a=None, default_value=None):
         try:
             inferred_param_type, inferred_default = get_param_info(algo.__init__, param_name)
         except ValueError:
-            raise ValueError(f'{algo.__name__}: Unknown __init__ parameter {param_name}.')
+            #raise ValueError(f'{algo.__name__}: Unknown __init__ parameter {param_name}.')
+            inferred_param_type, inferred_default = None, None
 
         # infer class and default value
         if is_a is not None:
@@ -103,10 +109,9 @@ def get_param_info(func, param_name):
 
 def register_configs():
     # run all class definitions to register their configs
-    #import coro.common.algo.algo
-    import coro.common.algo.bc
-    import coro.common.algo.act
-    import coro.common.algo.diffusion_policy
+    import lecoro.common.algo.act.modeling_act
+    import lecoro.common.algo.diffusion.modeling_diffusion
+    import lecoro.common.algo.dit.modeling_dit
 
     # register all names, so what we can choose them easily via scripts/train.py +algo=bc-small
     stored_param_names_to_cls = {}
@@ -149,32 +154,56 @@ def register_configs():
                         f'register_configs: _default is a reserved parameter name for the parameter {param_name}')
 
             # store default value for that parameter
-            if param_name in algo_kwargs.keys():  # default passed to register_variant, which overwrites the params default value
-                _default_value = algo_kwargs[param_name]
+            if param_name in algo_kwargs:  # default passed to register_variant, which overwrites the params default value
+                default_value = algo_kwargs[param_name]
                 del algo_kwargs[param_name]
-            elif isinstance(default_value, str):  # default value is a string referring to a group choice in config/algo_params.py
+
+            if isinstance(default_value, str):  # default value is a string referring to a group choice in config/algo_params.py
                 _default_value = default_value
             elif type(default_value) == type:  # default_value is a class, that was passed to register_param
                 default_cfg = builds(default_value, zen_partial=True, populate_full_signature=True)
                 store(default_cfg, group=f'algo/{param_name}', name='_default')
-                _default_value = '_default'
+                default_value = '_default'
             else:  # default_value is an instance, that was passed to register_param
                 default_cfg = build_config_from_instance(default_value)
                 store(default_cfg, group=f'algo/{param_name}', name='_default')
-                _default_value = '_default'
-            algo_defaults.append({f'{param_name}': _default_value})
+                default_value = '_default'
+            algo_defaults.append({f'{param_name}': default_value})
 
         # now we need to build the algo config itself with its correct default values
         hydra_defaults = encoder_default + algo_defaults + ['_self_']
         algo_cfg = builds(algo_cls,
-                          zen_partial=True,
+                          zen_partial=False,
                           populate_full_signature=True,
                           zen_meta={'name': algo_name},
                           zen_exclude=list(_ALGO_CLS_TO_NESTED_PARAMS.keys()),
+
+                          # This one is important: when passing primitive types such as dicts or lists at construction+
+                          # e.g., instantiate(algo_cfg, shape_meta=<some_dict>), we do NOT want shape_meta to be passed
+                          # as a ListConfig, but as a primitive list instead. Otherwise, HuggingFace's config serialization
+                          # ignores it.
+                          hydra_convert='partial',
                           hydra_defaults=hydra_defaults,
                           **algo_kwargs)
         store(algo_cfg, group='algo', name=algo_name)
     return algo_defaults
+
+
+@dataclass
+class AlgoConfig:
+    obs_config: dict[str, dict] = None
+    dataset_stats: dict[str, dict] | None = None
+
+    shape_meta: dict[str, tuple[int]] | None = None
+    output_shapes: dict[str, tuple[int]] | None = None
+    output_shapes: dict[str, tuple[int]] | None = None
+
+@dataclass
+class LeRobotConfig(AlgoConfig):
+    optimizer: Callable = partial(Adam, lr=0.0003, weight_decay=1e-4)
+    lr_scheduler: Callable | None = None
+    grad_clip_norm: float | None = None
+    use_amp: bool = True
 
 
 if __name__ == "__main__":

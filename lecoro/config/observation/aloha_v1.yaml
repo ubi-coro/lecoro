@@ -1,4 +1,4 @@
-# how to overwrite group defaults (robomimic_resnet18 and refer to named configs, not to a literal values)
+# how to overwrite group defaults (robomimic_resnet18 and refer to named configs, not to literal values)
 defaults:
   - override encoder/rgb/backbone: resnet18-pretrained
   - override encoder/rgb/randomizer/1: color_randomizer

@@ -1,7 +1,15 @@
 # @package _global_
 defaults:
-  - override /observation/encoder/rgb/backbone: vit_small_patch16
+  - override /observation/encoder/rgb/backbone: resnet50_pretrained
   - override /observation/encoder/rgb/projection: spatial_softmax
   - override /observation/encoder/rgb/randomizer/1: crop_randomizer
   - override /observation/encoder/rgb/randomizer/2: color_randomizer
   - override /observation/encoder/rgb/randomizer/1: crop_randomizer
+
+observation:
+  encoder:
+    rgb:
+      normalization_stats:
+        # stats from imagenet, since we use a pretrained resnet
+        mean: [ [ [ 0.485 ] ], [ [ 0.456 ] ], [ [ 0.406 ] ] ]  # (c,1,1)
+        std: [ [ [ 0.229 ] ], [ [ 0.224 ] ], [ [ 0.225 ] ] ]  # (c,1,1)

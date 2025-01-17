@@ -30,14 +30,14 @@ import numpy as np
 import torch
 import torch.nn.functional as F  # noqa: N812
 from huggingface_hub import PyTorchModelHubMixin
-from lerobot.common.policies.act.configuration_act import ACTConfig
 from torch import Tensor, nn
 
-from coro.common.algo.algo import LeRobotPolicy
-from coro.common.model.encoder import encoder_factory, ObservationEncoder
-from coro.common.config_gen.algo import register_variant, register_param
-from coro.common.config_gen.observation import ObsConfig
-from coro.common.utils.obs_utils import filter_modality
+from lecoro.common.algo.act.configuration_act import ACTConfig
+from lecoro.common.algo.algo_protocol import LeRobotPolicy
+from lecoro.common.algo.config_gen import register_variant, register_param
+from lecoro.common.algo.encoder import encoder_factory, ObservationEncoder
+from lecoro.common.config_gen import ObsConfig
+from lecoro.common.utils.obs_utils import filter_modality
 
 """
 changes from lerobot:
@@ -72,18 +72,17 @@ class ACTPolicy(
     default_encoder_node = "act_default_encoder"
 
     def __init__(
-        self,
-        optimizer: Callable,
-        lr_scheduler: Callable | None = None,
-        grad_clip_norm: float | None = None,
-        use_amp: bool = True,
+            self,
+            optimizer: Callable,
+            lr_scheduler: Callable | None = None,
+            grad_clip_norm: float | None = None,
+            use_amp: bool = True,
 
-        lr_backbone: float = 1e-6,
-        vae_state_keys: tuple[str] | None = None,
+            lr_backbone: float = 1e-6,
+            vae_state_keys: tuple[str] | None = None,
 
-
-        config: ACTConfig | None = None,
-        **kwargs
+            config: ACTConfig | None = None,
+            **kwargs
     ):
         """
         Args:
@@ -92,38 +91,19 @@ class ACTPolicy(
             dataset_stats: Dataset statistics to be used for normalization. If not passed here, it is expected
                 that they will be passed with a call to `load_state_dict` before the policy is used.
         """
+        LeRobotPolicy.__init__(self, optimizer, lr_scheduler, grad_clip_norm, use_amp)
+
         if config is None:
             config = ACTConfig()
         self.algo_config: ACTConfig = replace(config, **kwargs)
 
-        # add new fields to dataclass config that are not part of LeRobot
+        # add new fields to dataclass config that are not part of LeRobot config
         # hacky, but we do not need dataclass integration
         self.algo_config.vae_state_keys = vae_state_keys
         self.algo_config.lr_backbone = lr_backbone
 
-        self.optimizer = optimizer
-        self.lr_scheduler = lr_scheduler
-        self.grad_clip_norm = grad_clip_norm
-        self.use_amp = use_amp
         self.temporal_ensembler = None
         self._action_queue = None
-
-    def make(
-        self,
-        obs_config: ObsConfig,
-        shape_meta: dict[str, tuple],
-        dataset_stats: dict[str, dict[str, Tensor]] | None = None
-    ):
-        LeRobotPolicy.__init__(
-            self,
-            obs_config=obs_config,
-            shape_meta=shape_meta,
-            optimizer=self.optimizer,
-            dataset_stats=dataset_stats,
-            lr_scheduler=self.lr_scheduler,
-            grad_clip_norm=self.grad_clip_norm,
-            use_amp=self.use_amp
-        )
 
     def _create_model(self):
         self.algo_config.input_shapes = self.input_shapes
@@ -208,7 +188,7 @@ class ACTPolicy(
         actions_hat, (mu_hat, log_sigma_x2_hat) = self.model(batch)
 
         l1_loss = (
-            F.l1_loss(batch["action"], actions_hat, reduction="none") * ~batch["action_is_pad"].unsqueeze(-1)
+                F.l1_loss(batch["action"], actions_hat, reduction="none") * ~batch["action_is_pad"].unsqueeze(-1)
         ).mean()
 
         loss_dict = {"l1_loss": l1_loss.item()}
@@ -439,7 +419,7 @@ class ACT(nn.Module):
         """
         if self.algo_config.use_vae and self.training:
             assert (
-                "action" in batch
+                    "action" in batch
             ), "actions must be provided when using the variational objective in training mode."
 
         batch_size = batch[self._any_obs_key].shape[0]
@@ -452,6 +432,8 @@ class ACT(nn.Module):
             )  # (B, 1, D)
 
             action_embed = self.vae_encoder_action_input_proj(batch["action"])  # (B, S, D)
+            if len(action_embed.shape) == 2:
+                action_embed = action_embed[:, None, :]
 
             if self.vae_state_shapes:
                 state_embed = self.vae_state_encoder(batch)  # (B, L, D)
@@ -486,7 +468,7 @@ class ACT(nn.Module):
             latent_pdf_params = self.vae_encoder_latent_output_proj(cls_token_out)
             mu = latent_pdf_params[:, : self.algo_config.latent_dim]
             # This is 2log(sigma). Done this way to match the original implementation.
-            log_sigma_x2 = latent_pdf_params[:, self.algo_config.latent_dim :]
+            log_sigma_x2 = latent_pdf_params[:, self.algo_config.latent_dim:]
 
             # Sample the latent with the reparameterization trick.
             batch['latent'] = mu + log_sigma_x2.div(2).exp() * torch.randn_like(mu)
@@ -590,7 +572,6 @@ class ACTObsEncoder(ObservationEncoder):
         features = []  # (@self.n_tokens, b, self.feature_dim)
         embeddings = []
         for key in self.in_shapes:
-
             # process obs with pooling layer
             x = self.backbone(key=key, x=obs_dict[key])
 
@@ -629,7 +610,7 @@ class ACTEncoder(nn.Module):
         self.norm = nn.LayerNorm(config.dim_model) if config.pre_norm else nn.Identity()
 
     def forward(
-        self, x: Tensor, pos_embed: Tensor | None = None, key_padding_mask: Tensor | None = None
+            self, x: Tensor, pos_embed: Tensor | None = None, key_padding_mask: Tensor | None = None
     ) -> Tensor:
         for layer in self.layers:
             x = layer(x, pos_embed=pos_embed, key_padding_mask=key_padding_mask)
@@ -684,11 +665,11 @@ class ACTDecoder(nn.Module):
         self.norm = nn.LayerNorm(config.dim_model)
 
     def forward(
-        self,
-        x: Tensor,
-        encoder_out: Tensor,
-        decoder_pos_embed: Tensor | None = None,
-        encoder_pos_embed: Tensor | None = None,
+            self,
+            x: Tensor,
+            encoder_out: Tensor,
+            decoder_pos_embed: Tensor | None = None,
+            encoder_pos_embed: Tensor | None = None,
     ) -> Tensor:
         for layer in self.layers:
             x = layer(
@@ -724,11 +705,11 @@ class ACTDecoderLayer(nn.Module):
         return tensor if pos_embed is None else tensor + pos_embed
 
     def forward(
-        self,
-        x: Tensor,
-        encoder_out: Tensor,
-        decoder_pos_embed: Tensor | None = None,
-        encoder_pos_embed: Tensor | None = None,
+            self,
+            x: Tensor,
+            encoder_out: Tensor,
+            decoder_pos_embed: Tensor | None = None,
+            encoder_pos_embed: Tensor | None = None,
     ) -> Tensor:
         """
         Args:
@@ -828,7 +809,7 @@ class ACTSinusoidalPositionEmbedding2d(nn.Module):
         x_range = x_range / (x_range[:, :, -1:] + self._eps) * self._two_pi
 
         inverse_frequency = self._temperature ** (
-            2 * (torch.arange(self.dimension, dtype=torch.float32, device=x.device) // 2) / self.dimension
+                2 * (torch.arange(self.dimension, dtype=torch.float32, device=x.device) // 2) / self.dimension
         )
 
         x_range = x_range.unsqueeze(-1) / inverse_frequency  # (1, H, W, 1)

@@ -1,17 +1,15 @@
-import copy
 from pathlib import Path
 from typing import Callable, Dict, List, Literal
 
 import torch
-from av import logging
 from omegaconf import OmegaConf
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata, MultiLeRobotDataset, CODEBASE_VERSION
+from lerobot.common.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata, MultiLeRobotDataset
 from lerobot.common.datasets.sampler import EpisodeAwareSampler
 from torch.utils.data import Dataset
 
-from coro.common.utils.hf_utils import create_branch, create_repo, create_lecoro_dataset_card, upload_folder
-import coro.common.utils.obs_utils as ObsUtils
-from coro.common.config_gen.observation import ObsConfig, ModalityConfig
+import lecoro.common.utils.obs_utils as ObsUtils
+from lecoro.common.config_gen import ObsConfig
+from lecoro.common.utils.tensor_utils import to_list
 
 
 # assuming this file is in the same directory
@@ -114,6 +112,7 @@ class LeCoroDataset(Dataset):
                         self._all_groups.append('obs')
                     if group == 'goals':
                         self._all_groups.append('goal_obs')
+
             self._expected_keys = set(self._expected_keys)
             self._all_groups = set(self._all_groups)
 
@@ -161,16 +160,16 @@ class LeCoroDataset(Dataset):
                 groups = self._key_to_groups[new_key]
 
                 if 'obs' in groups or 'subgoal' in groups:
-                    new_frame['obs'][new_key] = ObsUtils.process_obs(frame[key], obs_key=key)
+                    new_frame['obs'][new_key] = ObsUtils.process_obs(frame[key], obs_key=new_key)
 
                 if 'goal' in groups:
-                    new_frame['goal_obs'][new_key] = ObsUtils.process_obs(goal_frame[key], obs_key=key)
+                    new_frame['goal_obs'][new_key] = ObsUtils.process_obs(goal_frame[key], obs_key=new_key)
 
             elif self.obs_keys is not None and new_key in self.obs_keys:
-                new_frame[new_key] = ObsUtils.process_obs(frame[key], obs_key=key)
+                new_frame[new_key] = ObsUtils.process_obs(frame[key], obs_key=new_key)
 
             elif new_key in self.dataset_keys:
-                new_frame[new_key] = ObsUtils.process_obs(frame[key], obs_key=key)
+                new_frame[new_key] = ObsUtils.process_obs(frame[key], obs_key=new_key)
 
         return new_frame
 
@@ -193,6 +192,15 @@ class LeCoroDataset(Dataset):
             return None
 
     def set_delta_timestamps(self, delta_timestamps):
+        # overwrite state keys if we know the true dataset keys (top -> observation.images.top)
+        # otherwise indexing the dataset fails because the short keys (top) are not present
+        if self.dataset is not None:
+            for key in self.dataset.features:
+                new_key = self.key_formatter(key)
+                if key != new_key and new_key in delta_timestamps:
+                    delta_timestamps[key] = delta_timestamps[new_key]
+                    del delta_timestamps[new_key]
+
         self._dataset_kwargs['delta_timestamps'] = delta_timestamps
         self._load_dataset()
 
@@ -256,3 +264,5 @@ class LeCoroDataset(Dataset):
                 stats = OmegaConf.to_container(listconfig, resolve=True)
                 self.meta.stats[key][stats_type] = torch.tensor(stats, dtype=torch.float32)
 
+        # we want to be able to serialize dataset stats -> to numpy array
+        #self.meta.stats = to_list(self.meta.stats)

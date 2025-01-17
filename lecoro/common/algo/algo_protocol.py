@@ -21,10 +21,12 @@ subclass a base class.
 The protocol structure, method signatures, and docstrings should be used by developers as a reference for
 how to implement new algo.
 """
-
+from abc import ABC
+from dataclasses import replace
 from typing import Protocol, runtime_checkable
 
 from torch import Tensor
+
 """
 Heavily inspired by robomimic's algorithm implementations.
 
@@ -38,19 +40,20 @@ These factory functions are registered into a global dictionary with the
 """
 from contextlib import nullcontext
 from collections import OrderedDict
-import copy
 import time
 from typing import Callable
 
 import torch
 import torch.nn as nn
-from lerobot.common.policies.normalize import Normalize, Unnormalize
+from omegaconf import OmegaConf
 from torch import Tensor
 from torch.cuda.amp import GradScaler
 
-from coro.common.config_gen import ObsConfig
-from coro.common.utils.obs_utils import all_keys, get_normalization_mode, process_obs_dict, OBS_KEYS_TO_MODALITIES
-from coro.common.utils.train_utils import get_device_from_parameters
+from lecoro.common.algo.config_gen import AlgoConfig, LeRobotConfig
+from lecoro.common.algo.normalize import Normalize, Unnormalize
+from lecoro.common.algo.utils import get_device_from_parameters
+from lecoro.common.config_gen import ObsConfig
+from lecoro.common.utils.obs_utils import all_keys, get_normalization_mode, process_obs_dict
 
 
 class Algo(nn.Module):
@@ -59,63 +62,42 @@ class Algo(nn.Module):
     functions that should be overriden by subclasses, in order to provide
     a standard API to be used by training functions such as @run_epoch in
     utils/train_utils.py.
+
+    Purposely does not define __init__ to enable simpler configuration with hydra_zen.builds
     """
     name: str
     default_encoder_node: str | None
 
     def __init__(
-        self,
-        obs_config: ObsConfig,
-        shape_meta: dict[str, tuple],
-        dataset_stats: dict[str, dict[str, Tensor]] | None = None,
+            self,
+            config: AlgoConfig,
+            **kwargs
     ):
-        """
-        Args:
-            algo_config (Config object): instance of Config corresponding to the algo section
-                of the config
-
-            obs_config (Config object): instance of Config corresponding to the observation
-                section of the config
-
-            global_config (Config object): global training config
-
-            obs_key_shapes (OrderedDict): dictionary that maps observation keys to shapes
-
-            ac_dim (int): dimension of action space
-
-            device (torch.Device): where the algo should live (i.e. cpu, gpu)
-        """
         super().__init__()
-        self.obs_config = obs_config
-        self.shape_meta = shape_meta
+        self.config = replace(config, **kwargs)
+        self.obs_config = self.config.obs_config
+        self.shape_meta = self.config.shape_meta
+        self.dataset_stats = self.config.dataset_stats
+
+        assert 'action' in self.shape_meta, "The canonical output key is 'action' and is required by all algorithms"
+        self.config.input_shapes = {key: self.shape_meta[key] for key in all_keys(self.obs_config.modalities) if key in self.shape_meta}
+        self.config.output_shapes = {'action': self.shape_meta['action']}
 
         # normalization
-        assert 'action' in shape_meta, "The canonical output key is 'action' and is required by all algorithms"
-        self.input_shapes = {key: shape_meta[key] for key in all_keys(self.obs_config.modalities) if key in shape_meta}
-        self.output_shapes = {'action': shape_meta['action']}
-        self.dataset_stats = dataset_stats
+        input_normalization_modes = {}
+        for key in self.config.input_shapes:
+            input_normalization_modes[key] = get_normalization_mode(self.obs_config, key)
+        output_normalization_modes = {'action': self.obs_config.decoder.normalization_mode}
 
-        if self.dataset_stats is not None:
-            input_normalization_modes = {}
-            for key in self.input_shapes:
-                input_normalization_modes[key] = get_normalization_mode(obs_config, key)
-
-            self.output_shapes = {'action': shape_meta['action']}
-            output_normalization_modes = {'action': obs_config.decoder.normalization_mode}
-
-            self.normalize_inputs = Normalize(
-                self.input_shapes, input_normalization_modes, dataset_stats
-            )
-            self.normalize_targets = Normalize(
-                self.output_shapes, output_normalization_modes, dataset_stats
-            )
-            self.unnormalize_outputs = Unnormalize(
-                self.output_shapes, output_normalization_modes, dataset_stats
-            )
-        else:
-            self.normalize_inputs = lambda batch: batch
-            self.normalize_targets = lambda batch: batch
-            self.unnormalize_outputs = lambda batch: batch
+        self.normalize_inputs = Normalize(
+            self.config.input_shapes, input_normalization_modes, self.dataset_stats
+        )
+        self.normalize_targets = Normalize(
+            self.config.output_shapes, output_normalization_modes, self.dataset_stats
+        )
+        self.unnormalize_outputs = Unnormalize(
+            self.config.output_shapes, output_normalization_modes, self.dataset_stats
+        )
 
         self.model = nn.Module()
         self._create_shapes()
@@ -142,7 +124,7 @@ class Algo(nn.Module):
 
         # We check across all modality groups (obs, goal, subgoal), and see if the inputted observation key exists
         # across all modalitie specified in the config. If so, we store its corresponding shape internally
-        for k in self.input_shapes:
+        for k in self.config.input_shapes:
             if "obs" in self.obs_config.modalities and k in [obs_key for modality in self.obs_config.modalities.obs.values() for obs_key in modality]:
                 self.obs_shapes[k] = self.shape_meta[k]
             if "goal" in self.obs_config.modalities and k in [obs_key for modality in self.obs_config.modalities.goal.values() for obs_key in
@@ -201,6 +183,7 @@ class Algo(nn.Module):
         Returns:
             batch (dict): postproceesed batch
         """
+
         def process_helper(obs_dict):
             obs_dict = process_obs_dict(obs_dict)
             if self.dataset_stats is not None:
@@ -241,10 +224,11 @@ class Algo(nn.Module):
         raise NotImplementedError
 
 
-class PolicyAlgo(Algo):
+class PolicyAlgo(Algo, ABC):
     """
     Base class for all algorithms that can be used as policies.
     """
+
     def select_action(self, obs_dict, goal_dict=None):
         """
         Get policy action outputs.
@@ -259,10 +243,11 @@ class PolicyAlgo(Algo):
         raise NotImplementedError
 
 
-class ValueAlgo(Algo):
+class ValueAlgo(Algo, ABC):
     """
     Base class for all algorithms that can learn a value function.
     """
+
     def get_state_value(self, obs_dict, goal_dict=None):
         """
         Get state value outputs.
@@ -291,11 +276,12 @@ class ValueAlgo(Algo):
         raise NotImplementedError
 
 
-class PlannerAlgo(Algo):
+class PlannerAlgo(Algo, ABC):
     """
     Base class for all algorithms that can be used for planning subgoals
     conditioned on current observations and potential goal observations.
     """
+
     def get_subgoal_predictions(self, obs_dict, goal_dict=None):
         """
         Get predicted subgoal outputs.
@@ -323,11 +309,12 @@ class PlannerAlgo(Algo):
         raise NotImplementedError
 
 
-class HierarchicalAlgo(Algo):
+class HierarchicalAlgo(Algo, ABC):
     """
     Base class for all hierarchical algorithms that consist of (1) subgoal planning
     and (2) subgoal-conditioned policy learning.
     """
+
     def select_action(self, obs_dict, goal_dict=None):
         """
         Get policy action outputs.
@@ -365,33 +352,30 @@ class HierarchicalAlgo(Algo):
         raise NotImplementedError
 
 
-class LeRobotPolicy(PolicyAlgo):
+class LeRobotPolicy(PolicyAlgo, ABC):
+
     def __init__(
-        self,
-        obs_config: ObsConfig,
-        shape_meta: dict[str, tuple],
-        optimizer: Callable,
-        dataset_stats: dict[str, dict[str, Tensor]] | None = None,
-        lr_scheduler: Callable | None = None,
-        grad_clip_norm: float | None = None,
-        use_amp: bool = True,
+            self,
+            config: LeRobotConfig,
+            **kwargs
     ):
-        PolicyAlgo.__init__(self, obs_config, shape_meta, dataset_stats)
+        super().__init__(config, **kwargs)
 
-        if grad_clip_norm is None:
-            grad_clip_norm = torch.inf
-        self.grad_clip_norm = grad_clip_norm
-        self.grad_scaler = GradScaler(enabled=use_amp)
+        if self.config.grad_clip_norm is None:
+            self.config.grad_clip_norm = torch.inf
+        self.optimizer_callable = self.config.optimizer
+        self.lr_scheduler_callable = self.config.lr_scheduler
 
-        self.optimizer = self.lr_scheduler = None
-        self._create_optimizer_and_scheduler(optimizer, lr_scheduler)
+        self.optimizer = None
+        self.lr_scheduler = None
+        self.grad_scaler = GradScaler(enabled=self.config.use_amp)
+        self._create_optimizer_and_scheduler(self.optimizer_callable, self.lr_scheduler_callable)
 
     def forward(self, batch, lock=None) -> dict:
         """Returns a dictionary of items for logging."""
         start_time = time.perf_counter()
         device = get_device_from_parameters(self)
-        with torch.autocast(device_type=device.type) if self.use_amp else nullcontext():
-
+        with torch.autocast(device_type=device.type) if self.config.use_amp else nullcontext():
             # LeRobot policies uses flat dictionaries as inputs, we 'flatten'
             # our structured batch and discard unused info, such as goal_obs
             flat_batch = batch['obs'] | {key: value for key, value in batch.items() if key != 'obs'}
@@ -405,7 +389,7 @@ class LeRobotPolicy(PolicyAlgo):
 
         grad_norm = torch.nn.utils.clip_grad_norm_(
             self.parameters(),
-            self.grad_clip_norm,
+            self.config.grad_clip_norm,
             error_if_nonfinite=False,
         )
 
@@ -445,7 +429,7 @@ class LeRobotPolicy(PolicyAlgo):
     def get_train_state(self):
         train_state = {"optimizer": self.optimizer.state_dict()}
         if self.lr_scheduler is not None:
-            train_state = {"lr_scheduler": self.lr_scheduler.state_dict()}
+            train_state["lr_scheduler"] = self.lr_scheduler.state_dict()
         return train_state
 
     def load_train_state(self, train_state):
@@ -456,5 +440,3 @@ class LeRobotPolicy(PolicyAlgo):
             raise ValueError(
                 "The checkpoint contains a lr_scheduler state_dict, but no LRScheduler was provided."
             )
-
-

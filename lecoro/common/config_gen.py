@@ -1,39 +1,23 @@
-import os
 import importlib
+import os
 from dataclasses import dataclass
 from typing import Any
 
-from hydra_zen import MISSING, store
+from hydra_zen import builds, MISSING, store
+from omegaconf import OmegaConf
 
-from coro.common.config_gen.experiment import ExperimentConfig
-from coro.common.config_gen.observation import ObsConfig
-from coro.common.config_gen.training import TrainConfig
-from coro.common.config_gen.eval import EvalConfig
-from coro.common.utils.config_utils import build_nested_dataclass_config
-
-# # fix dynamic modulem loading, then this should work
-
-# todo: clean up algo selection
-
-
-def resolve_ts() -> str:
-    return datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+from lecoro.common.algo.encoder.config_gen import ObsConfig
+from lecoro.common.utils.config_utils import (
+    build_nested_dataclass_config,
+    resolve_debug_suffix,
+    resolve_overrides_and_ts,
+    resolve_ts
+)
+from lecoro.common.datasets.utils import remove_modality_prefix
 
 
-def resolve_debug_suffix(is_debug: bool) -> str:
-    if is_debug:
-        return '-debug'
-    else:
-        return ''
+CONFIGS_REGISTERED = False
 
-
-def resolve_overrides_and_ts() -> str:
-    """
-    def _resolver(cfg: Config):
-        return f'{get_hydra_overrides()}_{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}'
-    return _resolver()
-    """
-    return f'[{get_hydra_overrides()}]_{datetime.now().strftime("%Y-%m-%d-%H-%M-%S")}'
 
 @dataclass
 class EvalConfig:
@@ -41,14 +25,13 @@ class EvalConfig:
     frequency: int = 1000
     batch_size: int = 50
     n_episodes: int = 50
+    use_async_envs: bool = False
 
 
 @dataclass
 class CheckpointConfig:
     enable: bool = True
     frequency: int = 2000
-    batch_size: int = 50
-    n_episodes: int = 50
 
 
 @dataclass
@@ -56,37 +39,37 @@ class LogConfig:
     frequency: int = 100
     enable_system_metrics_logging: bool = True
 
+@dataclass
+class WandBConfig:
+    enable: bool = True
+    disable_artifact: bool = False  # Set to true to disable saving an artifact despite save_checkpoint == True
+    project: str = 'ubi'
+    notes: str = ''
 
 @dataclass
 class TrainConfig:
-    resume: bool = '${resume}'
-    seed: bool = '${seed}'
-
-    # data
-    dataset: Any = MISSING
-
     offline_steps: int = 10_000
+    batch_size: int = 256
     num_workers: int = 4
     device: str = 'cuda'
 
-    batch_size: int = 256
+    dataset: Any = MISSING
 
     # place this inside policy
     drop_n_last_frames: int = 7  # ${algo.horizon} - ${algo.n_action_steps} - ${algo.n_obs_steps} + 1
 
-    eval: EvalConfig = EvalConfig
-    checkpoint: CheckpointConfig = CheckpointConfig
-    logging: LogConfig = LogConfig
-
 @dataclass
 class Config:
     algo: Any = MISSING
-    recorder: Any = MISSING
+    workspace: Any = MISSING
     observation: ObsConfig = MISSING
     env: Any = MISSING
     training: TrainConfig = MISSING
-    hydra: Any = MISSING
-    wandb: Any = MISSING
+
+    eval: EvalConfig = MISSING
+    checkpoint: CheckpointConfig = MISSING
+    logging: LogConfig = MISSING
+    wandb: WandBConfig = MISSING
 
     resume: bool = MISSING
     seed: int = MISSING
@@ -97,13 +80,14 @@ class Config:
 
 
 def register_configs():
+    global CONFIGS_REGISTERED
+    if CONFIGS_REGISTERED:
+        return
 
     # run register functions to store each sub-config in the store
-    from coro.common.config_gen.algo import register_configs as register_algos
-    from coro.common.config_gen.algo_params import register_configs as register_algo_params
-    from coro.common.config_gen.observation import register_configs as register_obs
-    from coro.common.config_gen.resolver import register_resolver
-    from coro.common.config_gen.training import register_configs as register_training
+    from lecoro.common.algo.config_gen import register_configs as register_algos
+    from lecoro.common.algo.algo_params import register_configs as register_algo_params
+    from lecoro.common.algo.encoder.config_gen import register_configs as register_encoder
 
     # register all resolvers
     OmegaConf.register_new_resolver("timestamp", resolve_ts)  # use ${ts}
@@ -113,37 +97,19 @@ def register_configs():
     # start registering configs
     store._overwrite_ok = True
 
-    # dataset key formatter
-    from coro.common.utils.dataset_utils import remove_modality_prefix
+    # store the one dataset key formatter we have
     formatter_cfg = builds(remove_modality_prefix, return_modality=False, zen_partial=True)
     store(formatter_cfg, group='training/dataset/key_formatter', name='remove_prefix')
 
     register_algo_params()
     register_algos()
-    empty_obs_defaults = register_obs()
+    empty_obs_defaults = register_encoder()
 
-    # store internal hydra defaults
-    hydra_default = {
-        "run": {
-            "dir": "${oc.env:HOME}/outputs${debug-suffix:${debug}}/${now:%Y-%m-%d}/${now:%H-%M-%S}_${hydra.job.name}"
-        },
-        "sweep": {
-            "dir": "${oc.env:HOME}/outputs${debug-suffix:${debug}}/${now:%Y-%m-%d}/${now:%H-%M-%S}_${hydra.job.name}",
-            "subdir": "${hydra.job.num}"
-        },
-        "job": {
-            "config": {
-                "override_dirname": {
-                    "exclude_keys": ['experiment.name']
-                }
-            },
-            "name": "${experiment.name}"
-        }
-    }
     config = build_nested_dataclass_config(Config, hydra_defaults=empty_obs_defaults)
-    store(config, name='_base_')
+    store(config, name='_template_')
 
     store.add_to_hydra_store(overwrite_ok=True)
+    CONFIGS_REGISTERED = True
 
 
 def import_all_except(folder_path, exclude_files):
@@ -168,4 +134,8 @@ def import_all_except(folder_path, exclude_files):
                 spec.loader.exec_module(module)
                 modules[module_name] = module  # Add to dictionary of modules
     return modules
+
+
+if __name__ == "__main__":
+    register_configs()
 

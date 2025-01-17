@@ -250,7 +250,7 @@ Training should take several hours. You will find checkpoints in `outputs/train/
 
 ## Evaluate your policy
 
-You can use the `record` function from [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot.py) but with a policy checkpoint as input. For instance, run this command to record 10 evaluation episodes:
+You can use the `record` function from [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot_old.py) but with a policy checkpoint as input. For instance, run this command to record 10 evaluation episodes:
 ```bash
 python lecoro/scripts/control_robot.py record \
   --robot-path lecoro/configs/robot/moss.yaml \

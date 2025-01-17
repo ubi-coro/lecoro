@@ -59,17 +59,20 @@ import torch
 from huggingface_hub import snapshot_download
 from huggingface_hub.errors import RepositoryNotFoundError
 from huggingface_hub.utils._validators import HFValidationError
+from hydra_zen import instantiate
 from torch import Tensor, nn
 from tqdm import trange
 
+from lecoro.common.config_gen import Config, register_configs
 from lecoro.common.datasets.factory import make_dataset
 from lecoro.common.envs.factory import make_env
 from lecoro.common.envs.utils import preprocess_observation
 from lecoro.common.logger import log_output_dir
-from lecoro.common.algo.factory import make_policy
-from lecoro.common.algo.algo_protocol import Policy
+from lecoro.common.algo.factory import make_algo
+from lecoro.common.algo.algo_protocol import Algo
 from lecoro.common.algo.utils import get_device_from_parameters
 from lecoro.common.utils.io_utils import write_video
+from lecoro.common.utils.obs_utils import initialize_obs_utils_with_config
 from lecoro.common.utils.utils import (
     get_safe_torch_device,
     init_hydra_config,
@@ -78,10 +81,14 @@ from lecoro.common.utils.utils import (
     set_global_seed,
 )
 
+register_configs()
+
+
 
 def rollout(
     env: gym.vector.VectorEnv,
-    policy: Policy,
+    algo: Algo,
+    key_formatter: Callable | None = None,
     seeds: list[int] | None = None,
     return_observations: bool = False,
     render_callback: Callable[[gym.vector.VectorEnv], None] | None = None,
@@ -117,11 +124,14 @@ def rollout(
     Returns:
         The dictionary described above.
     """
-    assert isinstance(policy, nn.Module), "Policy must be a PyTorch nn module."
-    device = get_device_from_parameters(policy)
+    assert isinstance(algo, nn.Module), "Algo must be a PyTorch nn module."
+    device = get_device_from_parameters(algo)
 
-    # Reset the policy and environments.
-    policy.reset()
+    if key_formatter is None:
+        key_formatter = lambda x: x
+
+    # Reset the algo and environments.
+    algo.reset()
 
     observation, info = env.reset(seed=seeds)
     if render_callback is not None:
@@ -144,15 +154,15 @@ def rollout(
         leave=False,
     )
     while not np.all(done):
-        # Numpy array to tensor and changing dictionary keys to LeRobot policy format.
+        # Numpy array to tensor and changing dictionary keys to LeRobot algo format.
         observation = preprocess_observation(observation)
         if return_observations:
             all_observations.append(deepcopy(observation))
 
-        observation = {key: observation[key].to(device, non_blocking=True) for key in observation}
+        observation = {key_formatter(key): observation[key].to(device, non_blocking=True) for key in observation}
 
         with torch.inference_mode():
-            action = policy.select_action(observation)
+            action = algo.select_action(observation)
 
         # Convert to CPU / numpy.
         action = action.to("cpu").numpy()
@@ -206,10 +216,11 @@ def rollout(
     return ret
 
 
-def eval_policy(
+def eval_algo(
     env: gym.vector.VectorEnv,
-    policy: torch.nn.Module,
+    algo: torch.nn.Module,
     n_episodes: int,
+    key_formatter: Callable | None = None,
     max_episodes_rendered: int = 0,
     videos_dir: Path | None = None,
     return_episode_data: bool = False,
@@ -218,7 +229,7 @@ def eval_policy(
     """
     Args:
         env: The batch of environments.
-        policy: The policy.
+        algo: The algo.
         n_episodes: The number of episodes to evaluate.
         max_episodes_rendered: Maximum number of episodes to render into videos.
         videos_dir: Where to save rendered videos.
@@ -232,9 +243,9 @@ def eval_policy(
     if max_episodes_rendered > 0 and not videos_dir:
         raise ValueError("If max_episodes_rendered > 0, videos_dir must be provided.")
 
-    assert isinstance(policy, Policy)
+    assert isinstance(algo, Algo)
     start = time.time()
-    policy.eval()
+    algo.eval()
 
     # Determine how many batched rollouts we need to get n_episodes. Note that if n_episodes is not evenly
     # divisible by env.num_envs we end up discarding some data in the last batch.
@@ -282,7 +293,8 @@ def eval_policy(
             )
         rollout_data = rollout(
             env,
-            policy,
+            algo,
+            key_formatter,
             seeds=list(seeds) if seeds else None,
             return_observations=return_episode_data,
             render_callback=render_frame if max_episodes_rendered > 0 else None,
@@ -400,7 +412,7 @@ def eval_policy(
 def _compile_episode_data(
     rollout_data: dict, done_indices: Tensor, start_episode_index: int, start_data_index: int, fps: float
 ) -> dict:
-    """Convenience function for `eval_policy(return_episode_data=True)`
+    """Convenience function for `eval_algo(return_episode_data=True)`
 
     Compiles all the rollout data into a Hugging Face dataset.
 
@@ -443,16 +455,16 @@ def _compile_episode_data(
 
 
 def main(
-    pretrained_policy_path: Path | None = None,
+    pretrained_algo_path: Path | None = None,
     hydra_cfg_path: str | None = None,
     out_dir: str | None = None,
     config_overrides: list[str] | None = None,
 ):
-    assert (pretrained_policy_path is None) ^ (hydra_cfg_path is None)
-    if pretrained_policy_path is not None:
-        hydra_cfg = init_hydra_config(str(pretrained_policy_path / "config.yaml"), config_overrides)
+    assert (pretrained_algo_path is None) ^ (hydra_cfg_path is None)
+    if pretrained_algo_path is not None:
+        hydra_cfg: Config = init_hydra_config(str(pretrained_algo_path / "config.yaml"), config_overrides)
     else:
-        hydra_cfg = init_hydra_config(hydra_cfg_path, config_overrides)
+        hydra_cfg: Config = init_hydra_config(hydra_cfg_path, config_overrides)
 
     if hydra_cfg.eval.batch_size > hydra_cfg.eval.n_episodes:
         raise ValueError(
@@ -465,35 +477,40 @@ def main(
         )
 
     if out_dir is None:
-        out_dir = f"outputs/eval/{dt.now().strftime('%Y-%m-%d/%H-%M-%S')}_{hydra_cfg.env.name}_{hydra_cfg.policy.name}"
+        out_dir = f"outputs/eval/{dt.now().strftime('%Y-%m-%d/%H-%M-%S')}_{hydra_cfg.env.name}_{hydra_cfg.algo.name}"
 
     # Check device is available
-    device = get_safe_torch_device(hydra_cfg.device, log=True)
+    device = get_safe_torch_device(hydra_cfg.training.device, log=True)
 
     torch.backends.cudnn.benchmark = True
     torch.backends.cuda.matmul.allow_tf32 = True
+
     set_global_seed(hydra_cfg.seed)
+    obs_config = instantiate(hydra_cfg.observation)
+    initialize_obs_utils_with_config(obs_config)
 
     log_output_dir(out_dir)
 
     logging.info("Making environment.")
     env = make_env(hydra_cfg)
 
-    logging.info("Making policy.")
+    logging.info("Making algo.")
     if hydra_cfg_path is None:
-        policy = make_policy(hydra_cfg=hydra_cfg, pretrained_policy_name_or_path=str(pretrained_policy_path))
+        algo = make_algo(cfg=hydra_cfg, pretrained_algo_name_or_path=str(pretrained_algo_path))
     else:
-        # Note: We need the dataset stats to pass to the policy's normalization modules.
-        policy = make_policy(hydra_cfg=hydra_cfg, dataset_stats=make_dataset(hydra_cfg).meta.stats)
+        # Note: We need the dataset shapes and stats to pass to the algo's normalization modules.
+        dataset = make_dataset(hydra_cfg).meta.stats
+        algo = make_algo(cfg=hydra_cfg, shape_meta=dataset.shape_meta, dataset_stats=dataset.meta.stats)
 
-    assert isinstance(policy, nn.Module)
-    policy.eval()
+    assert isinstance(algo, nn.Module)
+    algo.eval()
 
-    with torch.no_grad(), torch.autocast(device_type=device.type) if hydra_cfg.use_amp else nullcontext():
-        info = eval_policy(
+    with torch.no_grad(), torch.autocast(device_type=device.type) if hydra_cfg.algo.use_amp else nullcontext():
+        info = eval_algo(
             env,
-            policy,
+            algo,
             hydra_cfg.eval.n_episodes,
+            key_formatter=instantiate(hydra_cfg.training.dataset.key_formatter),
             max_episodes_rendered=10,
             videos_dir=Path(out_dir) / "videos",
             start_seed=hydra_cfg.seed,
@@ -509,27 +526,27 @@ def main(
     logging.info("End of eval")
 
 
-def get_pretrained_policy_path(pretrained_policy_name_or_path, revision=None):
+def get_pretrained_algo_path(pretrained_algo_name_or_path, revision=None):
     try:
-        pretrained_policy_path = Path(snapshot_download(pretrained_policy_name_or_path, revision=revision))
+        pretrained_algo_path = Path(snapshot_download(pretrained_algo_name_or_path, revision=revision))
     except (HFValidationError, RepositoryNotFoundError) as e:
         if isinstance(e, HFValidationError):
             error_message = (
-                "The provided pretrained_policy_name_or_path is not a valid Hugging Face Hub repo ID."
+                "The provided pretrained_algo_name_or_path is not a valid Hugging Face Hub repo ID."
             )
         else:
             error_message = (
-                "The provided pretrained_policy_name_or_path was not found on the Hugging Face Hub."
+                "The provided pretrained_algo_name_or_path was not found on the Hugging Face Hub."
             )
 
         logging.warning(f"{error_message} Treating it as a local directory.")
-        pretrained_policy_path = Path(pretrained_policy_name_or_path)
-    if not pretrained_policy_path.is_dir() or not pretrained_policy_path.exists():
+        pretrained_algo_path = Path(pretrained_algo_name_or_path)
+    if not pretrained_algo_path.is_dir() or not pretrained_algo_path.exists():
         raise ValueError(
-            "The provided pretrained_policy_name_or_path is not a valid/existing Hugging Face Hub "
+            "The provided pretrained_algo_name_or_path is not a valid/existing Hugging Face Hub "
             "repo ID, nor is it an existing local directory."
         )
-    return pretrained_policy_path
+    return pretrained_algo_path
 
 
 if __name__ == "__main__":
@@ -541,18 +558,18 @@ if __name__ == "__main__":
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument(
         "-p",
-        "--pretrained-policy-name-or-path",
+        "--pretrained-algo-name-or-path",
         help=(
             "Either the repo ID of a model hosted on the Hub or a path to a directory containing weights "
-            "saved using `Policy.save_pretrained`. If not provided, the policy is initialized from scratch "
+            "saved using `Algo.save_pretrained`. If not provided, the algo is initialized from scratch "
             "(useful for debugging). This argument is mutually exclusive with `--config`."
         ),
     )
     group.add_argument(
         "--config",
         help=(
-            "Path to a yaml config you want to use for initializing a policy from scratch (useful for "
-            "debugging). This argument is mutually exclusive with `--pretrained-policy-name-or-path` (`-p`)."
+            "Path to a yaml config you want to use for initializing a algo from scratch (useful for "
+            "debugging). This argument is mutually exclusive with `--pretrained-algo-name-or-path` (`-p`)."
         ),
     )
     parser.add_argument("--revision", help="Optionally provide the Hugging Face Hub revision ID.")
@@ -560,7 +577,7 @@ if __name__ == "__main__":
         "--out-dir",
         help=(
             "Where to save the evaluation outputs. If not provided, outputs are saved in "
-            "outputs/eval/{timestamp}_{env_name}_{policy_name}"
+            "outputs/eval/{timestamp}_{env_name}_{algo_name}"
         ),
     )
     parser.add_argument(
@@ -570,15 +587,15 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    if args.pretrained_policy_name_or_path is None:
+    if args.pretrained_algo_name_or_path is None:
         main(hydra_cfg_path=args.config, out_dir=args.out_dir, config_overrides=args.overrides)
     else:
-        pretrained_policy_path = get_pretrained_policy_path(
-            args.pretrained_policy_name_or_path, revision=args.revision
+        pretrained_algo_path = get_pretrained_algo_path(
+            args.pretrained_algo_name_or_path, revision=args.revision
         )
 
         main(
-            pretrained_policy_path=pretrained_policy_path,
+            pretrained_algo_path=pretrained_algo_path,
             out_dir=args.out_dir,
             config_overrides=args.overrides,
         )

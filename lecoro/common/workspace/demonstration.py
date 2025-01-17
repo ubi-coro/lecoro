@@ -1,19 +1,19 @@
+import logging
+import time
+import tqdm
 from dataclasses import replace
 from typing import List, Dict
-import tqdm
-import time
 
-from coro.common.env.base import ManipulatorEnv
-import coro.common.utils.control_utils as CtrlUtils
-import coro.common.utils.config_utils as ConfUtils
-import coro.common.utils.dataset_utils as DataUtils
-from coro.common.utils.hf_utils import push_to_hub
-import coro.common.utils.obs_utils as ObsUtils
-from coro.common.config_gen.recorder import BaseRecorderConfig
-from coro.common.config_gen.experiment import ExperimentConfig
+from lecoro.common.datasets.lerobot_dataset import LeRobotDataset
+from lecoro.common.datasets.utils import remove_modality_prefix
+from lecoro.common.envs.env_protocol import ManipulatorEnv
+from lecoro.common.robot_devices.control_utils import init_algo, init_keyboard_listener, predict_action, sanity_check_dataset_compatibility
+from lecoro.common.utils.obs_utils import is_image_modality, OBS_KEYS_TO_MODALITIES
+from lecoro.common.utils.utils import log_say
+from lecoro.common.workspace.config_gen import DemonstrationRecorderConfig
 
 
-class BaseRecorder:
+class DemonstrationRecorder:
     """
     Base class for recording robot environment data.
 
@@ -26,10 +26,10 @@ class BaseRecorder:
     def __init__(self,
                  env: ManipulatorEnv,
                  obs_keys: List[str],
-                 config: BaseRecorderConfig | None = None,
+                 config: DemonstrationRecorderConfig | None = None,
                  **kwargs):
         if config is None:
-            config = BaseRecorderConfig()
+            config = DemonstrationRecorderConfig()
 
         # Overwrite config arguments using kwargs
         self.config = replace(config, **kwargs)
@@ -42,12 +42,28 @@ class BaseRecorder:
 
         self.img_keys = [
             k for k in self.obs_keys if
-            ObsUtils.is_image_modality(ObsUtils.OBS_KEYS_TO_MODALITIES[DataUtils.remove_modality_prefix(k)])
+            is_image_modality(OBS_KEYS_TO_MODALITIES[remove_modality_prefix(k)])
         ]
         self.non_img_keys = [
             k for k in self.obs_keys if
-            not ObsUtils.is_image_modality(ObsUtils.OBS_KEYS_TO_MODALITIES[DataUtils.remove_modality_prefix(k)])
+            not is_image_modality(OBS_KEYS_TO_MODALITIES[remove_modality_prefix(k)])
         ]
+
+        self.teleoperate = False
+        if self.config.pretrained_policy_name_or_path is not None:
+            self.policy, policy_fps, self.device, self.use_amp = init_algo(
+                self.config.pretrained_policy_name_or_path,
+                self.config.algo_overrides
+            )
+
+            if self.env.fps is None:
+                self.env.fps = policy_fps
+                logging.warning(f"No fps provided, so using the fps from policy config ({policy_fps}).")
+            elif self.env.fps != policy_fps:
+                logging.warning(
+                    f"There is a mismatch between the provided fps ({self.env.fps}) and the one from policy config ({policy_fps})."
+                )
+            self.teleoperate = True
 
     def run(self):
         """
@@ -57,7 +73,7 @@ class BaseRecorder:
         """
         self.init_dataset()
 
-        listener, events = CtrlUtils.init_keyboard_listener(self.config.use_foot_switch, self.config.play_sounds)
+        listener, events = init_keyboard_listener(self.config.use_foot_switch, self.config.play_sounds)
 
         while True:
             if self.dataset is not None and self.dataset.num_episodes >= self.config.num_episodes:
@@ -66,7 +82,7 @@ class BaseRecorder:
             self.env.reset()
 
             episode_index = self.dataset.num_episodes
-            CtrlUtils.log_say(f"Recording episode {episode_index + 1}", self.config.play_sounds, blocking=True)
+            log_say(f"Recording episode {episode_index + 1}", self.config.play_sounds, blocking=True)
             self.await_gripper_closed(events)
 
             if events["stop_recording"]:
@@ -79,7 +95,7 @@ class BaseRecorder:
             self.record_episode(events)
 
             if events["rerecord_episode"]:
-                CtrlUtils.log_say("Re-record episode", self.config.play_sounds)
+                log_say("Re-record episode", self.config.play_sounds)
                 events["rerecord_episode"] = False
                 events["exit_early"] = False
                 self.dataset.clear_episode_buffer()  # to-do: fix this
@@ -94,17 +110,17 @@ class BaseRecorder:
                 break
 
         self.env.close()
-        CtrlUtils.log_say("Exiting, the dataset will be saved to disk", self.config.play_sounds, blocking=True)
+        log_say("Exiting, the dataset will be saved to disk", self.config.play_sounds, blocking=True)
         self.dataset.consolidate(self.config.run_compute_stats)
 
         if self.config.push_to_hub:
-            push_to_hub(dataset=self.dataset, tags=None)
+            self.dataset.push_to_hub(tags=None)
 
         return self.dataset
 
     def await_gripper_closed(self, events: Dict) -> bool:
         # close gripper to start
-        CtrlUtils.log_say("Close both grippers to start!", self.config.play_sounds)
+        log_say("Close both grippers to start!", self.config.play_sounds)
         while not all([pos < 5.0 for pos in self.env.gripper_pos]) and not events["stop_recording"]:
             time.sleep(0.1)
 
@@ -120,7 +136,11 @@ class BaseRecorder:
         with tqdm.tqdm(total=self.config.episode_time_s, colour='green') as pbar:
             while timestamp < self.config.episode_time_s:
 
-                frame = self.env.teleop_step(record_data=True)
+                if self.teleoperate:
+                    frame = self.env.teleop_step(record_data=True)
+                else:
+                    observation = self.env.capture_observation()
+                    pred_action = predict_action(observation, self.policy, self.device, self.use_amp)
 
                 self.dataset.add_frame(frame)
 
@@ -138,12 +158,12 @@ class BaseRecorder:
         """
         # Create empty dataset or load existing saved episodes
         if self.config.resume:
-            dataset = DataUtils.LeRobotDataset(
+            dataset = LeRobotDataset(
                 repo_id=self.config.dataset_repo_id,
                 root=self.config.root,
                 local_files_only=True
             )
-            CtrlUtils.sanity_check_dataset_compatibility(
+            sanity_check_dataset_compatibility(
                 dataset,
                 features=self.get_features(),
                 robot_type=self.env.config.robot_type,
@@ -155,7 +175,7 @@ class BaseRecorder:
             )
 
         else:
-            dataset = DataUtils.LeRobotDataset.create(
+            dataset = LeRobotDataset.create(
                 repo_id=self.config.dataset_repo_id,
                 root=self.config.root,
                 fps=self.env.fps,
@@ -165,7 +185,7 @@ class BaseRecorder:
                 image_writer_processes=self.config.num_image_writer_processes,
                 image_writer_threads=self.config.num_image_writer_threads_per_camera * len(self.img_keys)
             )
-        self.dataset: DataUtils.LeRobotDataset = dataset
+        self.dataset: LeRobotDataset = dataset
 
     def get_features(self) -> Dict:
         """
@@ -189,57 +209,3 @@ class BaseRecorder:
         for key in self.non_img_keys:
             features[key] = available_features[key]
         return features
-
-
-class HiLRecorder:
-    def __init__(self,
-                 env: ManipulatorEnv,
-                 config: BaseRecorderConfig | None = None,
-                 **kwargs):
-        if config is None:
-            config = BaseRecorderConfig()
-        # Overwrite config arguments using kwargs
-        self.config = replace(config, **kwargs)
-        self.env = env
-
-    def run(self):
-        pass
-
-    def init_dataset(self, obs_config):
-        pass
-
-    def add_frame(self):
-        pass
-
-    def to_hf_dataset(self):
-        pass
-
-    def from_dataset_to_lerobot_dataset(self):
-        pass
-
-
-class SubtaskRecorder:
-    def __init__(self,
-                 env: ManipulatorEnv,
-                 config: BaseRecorderConfig | None = None,
-                 **kwargs):
-        if config is None:
-            config = BaseRecorderConfig()
-        # Overwrite config arguments using kwargs
-        self.config = replace(config, **kwargs)
-        self.env = env
-
-    def run(self):
-        pass
-
-    def init_dataset(self, obs_config):
-        pass
-
-    def add_frame(self):
-        pass
-
-    def to_hf_dataset(self):
-        pass
-
-    def from_dataset_to_lerobot_dataset(self):
-        pass

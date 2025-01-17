@@ -14,11 +14,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from functools import partial
+from typing import Callable
+
+from torch.optim import Adam
+
+from lecoro.common.algo.config_gen import LeRobotConfig
 
 
 @dataclass
-class DiffusionConfig:
+class DiTConfig(LeRobotConfig):
     """Configuration class for DiffusionPolicy.
 
     Defaults are configured for training with PushT providing proprioceptive and single camera observations.
@@ -96,48 +102,22 @@ class DiffusionConfig:
             `LeRobotDataset` and `load_previous_and_future_frames` for mor information. Note, this defaults
             to False as the original Diffusion Policy implementation does the same.
     """
-
     # Inputs / output structure.
-    n_obs_steps: int = 5
+    n_obs_steps: int = 3
     horizon: int = 16
     n_action_steps: int = 8
 
-    input_shapes: dict[str, list[int]] = field(
-        default_factory=lambda: {
-            "observation.image": [3, 96, 96],
-            "observation.state": [2],
-        }
-    )
-    output_shapes: dict[str, list[int]] = field(
-        default_factory=lambda: {
-            "action": [2],
-        }
-    )
+    # DiT noise net.
+    token_dim: int = 512
+    feat_norm: str | None = None
+    time_dim: int = 256
+    hidden_dim: int = 512
+    num_blocks: int = 6
+    dropout: float = 0.1
+    dim_feedforward: int = 2048
+    nhead: int = 8
+    activation: str = "gelu"
 
-    # Normalization / Unnormalization
-    input_normalization_modes: dict[str, str] = field(
-        default_factory=lambda: {
-            "observation.image": "mean_std",
-            "observation.state": "min_max",
-        }
-    )
-    output_normalization_modes: dict[str, str] = field(default_factory=lambda: {"action": "min_max"})
-
-    # Architecture / modeling.
-    # Vision backbone.
-    vision_backbone: str = "resnet18"
-    crop_shape: tuple[int, int] | None = (84, 84)
-    crop_is_random: bool = True
-    pretrained_backbone_weights: str | None = None
-    use_group_norm: bool = True
-    spatial_softmax_num_keypoints: int = 32
-    use_separate_rgb_encoder_per_camera: bool = False
-    # Unet.
-    down_dims: tuple[int, ...] = (512, 1024, 2048)
-    kernel_size: int = 5
-    n_groups: int = 8
-    diffusion_step_embed_dim: int = 128
-    use_film_scale_modulation: bool = True
     # Noise scheduler.
     noise_scheduler_type: str = "DDPM"
     num_train_timesteps: int = 100
@@ -156,37 +136,6 @@ class DiffusionConfig:
 
     def __post_init__(self):
         """Input validation (not exhaustive)."""
-        if not self.vision_backbone.startswith("resnet"):
-            raise ValueError(
-                f"`vision_backbone` must be one of the ResNet variants. Got {self.vision_backbone}."
-            )
-
-        image_keys = {k for k in self.input_shapes if k.startswith("observation.image")}
-
-        if len(image_keys) == 0 and "observation.environment_state" not in self.input_shapes:
-            raise ValueError("You must provide at least one image or the environment state among the inputs.")
-
-        if len(image_keys) > 0:
-            if self.crop_shape is not None:
-                for image_key in image_keys:
-                    if (
-                        self.crop_shape[0] > self.input_shapes[image_key][1]
-                        or self.crop_shape[1] > self.input_shapes[image_key][2]
-                    ):
-                        raise ValueError(
-                            f"`crop_shape` should fit within `input_shapes[{image_key}]`. Got {self.crop_shape} "
-                            f"for `crop_shape` and {self.input_shapes[image_key]} for "
-                            "`input_shapes[{image_key}]`."
-                        )
-            # Check that all input images have the same shape.
-            first_image_key = next(iter(image_keys))
-            for image_key in image_keys:
-                if self.input_shapes[image_key] != self.input_shapes[first_image_key]:
-                    raise ValueError(
-                        f"`input_shapes[{image_key}]` does not match `input_shapes[{first_image_key}]`, but we "
-                        "expect all image shapes to match."
-                    )
-
         supported_prediction_types = ["epsilon", "sample"]
         if self.prediction_type not in supported_prediction_types:
             raise ValueError(
@@ -199,11 +148,5 @@ class DiffusionConfig:
                 f"Got {self.noise_scheduler_type}."
             )
 
-        # Check that the horizon size and U-Net downsampling is compatible.
-        # U-Net downsamples by 2 with each stage.
-        downsampling_factor = 2 ** len(self.down_dims)
-        if self.horizon % downsampling_factor != 0:
-            raise ValueError(
-                "The horizon should be an integer multiple of the downsampling factor (which is determined "
-                f"by `len(down_dims)`). Got {self.horizon=} and {self.down_dims=}"
-            )
+    def items(self):
+        return {}

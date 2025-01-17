@@ -16,6 +16,8 @@
 import torch
 from torch import Tensor, nn
 
+from lecoro.common.utils.obs_utils import is_image_key
+
 
 def create_stats_buffers(
     shapes: dict[str, list[int]],
@@ -39,7 +41,7 @@ def create_stats_buffers(
 
         shape = tuple(shapes[key])
 
-        if "image" in key:
+        if is_image_key(key):
             # sanity checks
             assert len(shape) == 3, f"number of dimensions of {key} != 3 ({shape=}"
             c, h, w = shape
