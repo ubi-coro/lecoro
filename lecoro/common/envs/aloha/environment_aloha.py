@@ -12,7 +12,7 @@ from typing import Dict
 import torch
 import gymnasium as gym
 
-from coro.common.config_gen.env.aloha import AlohaManipulatorConfig
+from lecoro.common.config_gen.env.aloha import AlohaManipulatorConfig
 from coro.common.env.base import ManipulatorEnv
 from coro.common.devices.robots.dynamixel import BaseManipulator
 from coro.common.utils.action_utils import ensure_safe_goal_position
@@ -37,7 +37,6 @@ class AlohaManipulatorEnv(ManipulatorEnv):
         self.follower_arms: Dict[str, BaseManipulator] = self.config.follower_arms
 
         self.cameras = self.config.cameras
-        self.cam_axes = {}
         self.botas = self.config.botas
 
         self.start_pos = np.array(self.config.start_pos).astype(np.int32)
@@ -117,7 +116,6 @@ class AlohaManipulatorEnv(ManipulatorEnv):
 
     @property
     def features(self):
-        # todo: add bota features as well
         return {**self.motor_features, **self.camera_features}
 
     @property

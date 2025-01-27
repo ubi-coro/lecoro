@@ -23,9 +23,8 @@ how to implement new algo.
 """
 from abc import ABC
 from dataclasses import replace
-from typing import Protocol, runtime_checkable
 
-from torch import Tensor
+from omegaconf import DictConfig
 
 """
 Heavily inspired by robomimic's algorithm implementations.
@@ -41,18 +40,16 @@ These factory functions are registered into a global dictionary with the
 from contextlib import nullcontext
 from collections import OrderedDict
 import time
-from typing import Callable
+from typing import Callable, Sequence
 
 import torch
 import torch.nn as nn
-from omegaconf import OmegaConf
 from torch import Tensor
 from torch.cuda.amp import GradScaler
 
 from lecoro.common.algo.config_gen import AlgoConfig, LeRobotConfig
 from lecoro.common.algo.normalize import Normalize, Unnormalize
 from lecoro.common.algo.utils import get_device_from_parameters
-from lecoro.common.config_gen import ObsConfig
 from lecoro.common.utils.obs_utils import all_keys, get_normalization_mode, process_obs_dict
 
 
@@ -75,6 +72,12 @@ class Algo(nn.Module):
     ):
         super().__init__()
         self.config = replace(config, **kwargs)
+
+        assert isinstance(self.config.obs_config, DictConfig), "obs_config must be a lecoro.common.config_gen.ObsConfig."
+        assert isinstance(self.config.shape_meta, dict), "shape_meta must be a dictionary"
+        assert all(isinstance(k, str) and isinstance(v, Sequence) and all(isinstance(i, int) for i in v)
+                   for k, v in self.config.shape_meta.items()), f"shape_meta must match {dict[str, tuple[int, ...]]}"
+
         self.obs_config = self.config.obs_config
         self.shape_meta = self.config.shape_meta
         self.dataset_stats = self.config.dataset_stats

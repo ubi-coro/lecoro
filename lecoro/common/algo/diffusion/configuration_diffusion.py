@@ -16,9 +16,11 @@
 # limitations under the License.
 from dataclasses import dataclass, field
 
+from lecoro.common.algo.config_gen import LeRobotConfig
+
 
 @dataclass
-class DiffusionConfig:
+class DiffusionConfig(LeRobotConfig):
     """Configuration class for DiffusionPolicy.
 
     Defaults are configured for training with PushT providing proprioceptive and single camera observations.

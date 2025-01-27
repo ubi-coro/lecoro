@@ -1,10 +1,39 @@
+from abc import ABC, abstractmethod
+import numpy as np
 
-class BaseManipulator(ABC):
+from lecoro.common.robot_devices.motors.dynamixel import (
+    DynamixelMotorsBus,
+    CalibrationMode,
+    TorqueMode,
+    INTERBOTIX_MOTORMODELS
+)
+from lecoro.common.robot_devices.robots.dynamixel_calibration import convert_degrees_to_steps, compute_nearest_rounded_position, apply_drive_mode
+from lecoro.common.robot_devices.utils import RobotDeviceAlreadyConnectedError, RobotDeviceNotConnectedError
+
+URL_TEMPLATE = (
+    "https://raw.githubusercontent.com/huggingface/lerobot/main/media/{robot}/{arm}_{position}.webp"
+)
+
+# The following positions are provided in nominal degree range ]-180, +180[
+# For more info on these constants, see comments in the code where they get used.
+ZERO_POSITION_DEGREE = 0
+ROTATED_POSITION_DEGREE = 90
+
+def require_connection(method):
+    """Decorator to check if the device is connected before executing the method."""
+    def wrapper(self, *args, **kwargs):
+        if not getattr(self, "is_connected", False):
+            raise RobotDeviceNotConnectedError(f"{self.__class__.__name__} is not connected.")
+        return method(self, *args, **kwargs)
+    return wrapper
+
+
+class _BaseDynamixelActuator(ABC):
     def __init__(self):
         # interface for managing lerobots Dynamixel Bus and
         pass
 
-    def run_arm_calibration(self, arm_name, arm_type):
+    def run_arm_calibration(self, robot_type, arm_name, arm_type):
         # arm_type must be in {"follower", "leader"}
 
         """This function ensures that a neural network trained on data collected on a given robot
@@ -31,10 +60,10 @@ class BaseManipulator(ABC):
         if (self.read_register("Torque_Enable") != TorqueMode.DISABLED.value).any():
             raise ValueError("To run calibration, the torque must be disabled on all motors.")
 
-        print(f"\nRunning calibration of {arm_name} {arm_type}...")
+        print(f"\nRunning calibration of {robot_type} {arm_name} {arm_type}...")
 
         print("\nMove arm to zero position")
-        print("See: " + URL_TEMPLATE.format(robot='aloha', arm=arm_type, position="zero"))
+        print("See: " + URL_TEMPLATE.format(robot=robot_type, arm=arm_type, position="zero"))
         input("Press Enter to continue...")
 
         # We arbitrarily chose our zero target position to be a straight horizontal position with gripper upwards and closed.
@@ -55,7 +84,7 @@ class BaseManipulator(ABC):
         # corresponds to opening the gripper. When the rotation direction is ambiguous, we arbitrarely rotate clockwise from the point of view
         # of the previous motor in the kinetic chain.
         print("\nMove arm to rotated target position")
-        print("See: " + URL_TEMPLATE.format(robot='aloha', arm=arm_type, position="rotated"))
+        print("See: " + URL_TEMPLATE.format(robot=robot_type, arm=arm_type, position="rotated"))
         input("Press Enter to continue...")
 
         rotated_target_pos = convert_degrees_to_steps(ROTATED_POSITION_DEGREE, self.motor_models)
@@ -71,7 +100,7 @@ class BaseManipulator(ABC):
         homing_offset = rotated_target_pos - rotated_nearest_pos
 
         print("\nMove arm to rest position")
-        print("See: " + URL_TEMPLATE.format(robot='aloha', arm=arm_type, position="rest"))
+        print("See: " + URL_TEMPLATE.format(robot=robot_type, arm=arm_type, position="rest"))
         input("Press Enter to continue...")
         print()
 
@@ -125,8 +154,6 @@ class BaseManipulator(ABC):
 
     @abstractmethod
     def apply_calibration(self, values, joint_names):
-        # same wrapper as DynamixelBus (maybe just for gripper?)
-        # maybe even same file?
         pass
 
     @abstractmethod
@@ -176,14 +203,15 @@ class BaseManipulator(ABC):
         pass
 
 
-class DynamixelManipulator(BaseManipulator):
-    def __init__(self, port, motors, mock=False, moving_time=2.0, accel_time=0.3, calibrate_gripper_only=False):
+class DynamixelActuator(_BaseDynamixelActuator):
+    def __init__(self, port, motors, mock=False, moving_time=2.0, accel_time=0.3):
         self.bus = DynamixelMotorsBus(port, motors, mock)
         self.moving_time = moving_time
         self.accel_time = accel_time
 
     @require_connection
     def set_presets(self, robot_type):
+        # dynamixel servos handle shadows automatically
         if "shoulder_shadow" in self.joint_names:
             shoulder_idx = self.bus.read("ID", "shoulder")
             self.bus.write("Secondary_ID", shoulder_idx, "shoulder_shadow")
@@ -364,7 +392,7 @@ class DynamixelManipulator(BaseManipulator):
         return self.bus.read(register_name, joint_names)
 
 
-class InterbotixManipulator(BaseManipulator):
+class InterbotixActuator(_BaseDynamixelActuator):
     ARM_GROUP = set(['waist', 'shoulder', 'elbow', 'forearm_roll', 'wrist_angle', 'wrist_rotate'])
     def __init__(self,
                  robot_name,

@@ -15,11 +15,13 @@
 # limitations under the License.
 from dataclasses import dataclass, field
 
+from lecoro.common.algo.config_gen import LeRobotConfig
+
 # we keep this the same to avoid conflicts when importing lerobot specs
 
 
 @dataclass
-class ACTConfig:
+class ACTConfig(LeRobotConfig):
     """Configuration class for the Action Chunking Transformers policy.
 
     Defaults are configured for training on bimanual Aloha tasks like "insertion" or "transfer".
@@ -118,10 +120,6 @@ class ACTConfig:
     )
 
     # Architecture.
-    # Vision backbone.
-    vision_backbone: str = "resnet18"
-    pretrained_backbone_weights: str | None = "ResNet18_Weights.IMAGENET1K_V1"
-    replace_final_stride_with_dilation: int = False
     # Transformer layers.
     pre_norm: bool = False
     dim_model: int = 512
@@ -145,13 +143,10 @@ class ACTConfig:
     # Training and loss computation.
     dropout: float = 0.1
     kl_weight: float = 10.0
+    lr_backbone: float = 1e-6,
 
     def __post_init__(self):
         """Input validation (not exhaustive)."""
-        if not self.vision_backbone.startswith("resnet"):
-            raise ValueError(
-                f"`vision_backbone` must be one of the ResNet variants. Got {self.vision_backbone}."
-            )
         if self.temporal_ensemble_coeff is not None and self.n_action_steps > 1:
             raise NotImplementedError(
                 "`n_action_steps` must be 1 when using temporal ensembling. This is "
@@ -166,8 +161,3 @@ class ACTConfig:
             raise ValueError(
                 f"Multiple observation steps not handled yet. Got `nobs_steps={self.n_obs_steps}`"
             )
-        if (
-            not any(k.startswith("observation.image") for k in self.input_shapes)
-            and "observation.environment_state" not in self.input_shapes
-        ):
-            raise ValueError("You must provide at least one image or the environment state among the inputs.")

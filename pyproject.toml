@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "lerobot"
+name = "lecoro"
 version = "0.1.0"
 description = "🤗 LeRobot: State-of-the-art Machine Learning for Real-World Robotics in Pytorch"
 authors = [
@@ -9,6 +9,7 @@ authors = [
     "Quentin Gallouédec <quentin.gallouedec@ec-lyon.fr>",
     "Adil Zouitine <adilzouitinegm@gmail.com>",
     "Thomas Wolf <thomaswolfcontact@gmail.com>",
+    "Jannick Stranghöner <jannick.stranghoener@uni-bielefeld.de>",
 ]
 repository = "https://github.com/huggingface/lerobot"
 readme = "README.md"
@@ -23,7 +24,7 @@ classifiers=[
     "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.10",
 ]
-packages = [{include = "lerobot"}]
+packages = [{include = "lecoro"}]
 
 
 [tool.poetry.dependencies]
@@ -34,6 +35,7 @@ wandb = ">=0.16.3"
 imageio = {extras = ["ffmpeg"], version = ">=2.34.0"}
 gdown = ">=5.1.0"
 hydra-core = ">=1.3.2"
+hydra-zen = ">=0.13.0"
 einops = ">=0.8.0"
 pymunk = ">=6.6.0"
 zarr = ">=2.17.0"
@@ -46,7 +48,6 @@ h5py = ">=3.10.0"
 huggingface-hub = {extras = ["hf-transfer", "cli"], version = ">=0.25.2"}
 gymnasium = "==0.29.1" # TODO(rcadene, aliberts): Make gym 1.0.0 work
 cmake = ">=3.29.0.1"
-gym-dora = { git = "https://github.com/dora-rs/dora-lerobot.git", subdirectory = "gym_dora", optional = true }
 gym-pusht = { version = ">=0.1.5", optional = true}
 gym-xarm = { version = ">=0.1.1", optional = true}
 gym-aloha = { version = ">=0.1.1", optional = true}

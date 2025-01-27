@@ -73,14 +73,6 @@ class ACTPolicy(
 
     def __init__(
             self,
-            optimizer: Callable,
-            lr_scheduler: Callable | None = None,
-            grad_clip_norm: float | None = None,
-            use_amp: bool = True,
-
-            lr_backbone: float = 1e-6,
-            vae_state_keys: tuple[str] | None = None,
-
             config: ACTConfig | None = None,
             **kwargs
     ):
@@ -91,28 +83,18 @@ class ACTPolicy(
             dataset_stats: Dataset statistics to be used for normalization. If not passed here, it is expected
                 that they will be passed with a call to `load_state_dict` before the policy is used.
         """
-        LeRobotPolicy.__init__(self, optimizer, lr_scheduler, grad_clip_norm, use_amp)
-
         if config is None:
             config = ACTConfig()
-        self.algo_config: ACTConfig = replace(config, **kwargs)
-
-        # add new fields to dataclass config that are not part of LeRobot config
-        # hacky, but we do not need dataclass integration
-        self.algo_config.vae_state_keys = vae_state_keys
-        self.algo_config.lr_backbone = lr_backbone
+        LeRobotPolicy.__init__(self, config, **kwargs)
 
         self.temporal_ensembler = None
         self._action_queue = None
 
     def _create_model(self):
-        self.algo_config.input_shapes = self.input_shapes
-        self.algo_config.output_shapes = self.output_shapes
+        self.model = ACT(config=self.config)
 
-        self.model = ACT(algo_config=self.algo_config)
-
-        if self.algo_config.temporal_ensemble_coeff is not None:
-            self.temporal_ensembler = ACTTemporalEnsembler(self.algo_config.temporal_ensemble_coeff, self.algo_config.chunk_size)
+        if self.config.temporal_ensemble_coeff is not None:
+            self.temporal_ensembler = ACTTemporalEnsembler(self.config.temporal_ensemble_coeff, self.config.chunk_size)
 
     def _create_optimizer_and_scheduler(self, optimizer: Callable, lr_scheduler: Callable | None):
         # check this
@@ -130,7 +112,7 @@ class ACTPolicy(
                     for n, p in self.model.named_parameters()
                     if 'backbones' in n and p.requires_grad
                 ],
-                "lr": self.algo_config.lr_backbone,
+                "lr": self.config.lr_backbone,
             },
         ]
         self.optimizer = optimizer(optimizer_params_dicts)
@@ -139,13 +121,13 @@ class ACTPolicy(
 
     def reset(self):
         """This should be called whenever the environment is reset."""
-        if self.algo_config.temporal_ensemble_coeff is not None:
+        if self.config.temporal_ensemble_coeff is not None:
             self.temporal_ensembler.reset()
         else:
-            self._action_queue = deque([], maxlen=self.algo_config.n_action_steps)
+            self._action_queue = deque([], maxlen=self.config.n_action_steps)
 
     def get_delta_timestamps(self, fps: float) -> dict:
-        return {'action': [i / fps for i in range(self.algo_config.chunk_size)]}
+        return {'action': [i / fps for i in range(self.config.chunk_size)]}
 
     @torch.no_grad
     def select_action(self, obs_dict: dict[str, Tensor], goal_dict=None) -> Tensor:
@@ -164,7 +146,7 @@ class ACTPolicy(
 
         # If we are doing temporal ensembling, do online updates where we keep track of the number of actions
         # we are ensembling over.
-        if self.algo_config.temporal_ensemble_coeff is not None:
+        if self.config.temporal_ensemble_coeff is not None:
             actions = self.model(batch)[0]  # (batch_size, chunk_size, action_dim)
             actions = self.unnormalize_outputs({"action": actions})["action"]
             action = self.temporal_ensembler.update(actions)
@@ -173,7 +155,7 @@ class ACTPolicy(
         # Action queue logic for n_action_steps > 1. When the action_queue is depleted, populate it by
         # querying the policy.
         if len(self._action_queue) == 0:
-            actions = self.model(batch)[0][:, : self.algo_config.n_action_steps]
+            actions = self.model(batch)[0][:, : self.config.n_action_steps]
 
             # TODO(rcadene): make _forward return output dictionary?
             actions = self.unnormalize_outputs({"action": actions})["action"]
@@ -192,7 +174,7 @@ class ACTPolicy(
         ).mean()
 
         loss_dict = {"l1_loss": l1_loss.item()}
-        if self.algo_config.use_vae:
+        if self.config.use_vae:
             # Calculate Dₖₗ(latent_pdf || standard_normal). Note: After computing the KL-divergence for
             # each dimension independently, we sum over the latent dimension to get the total
             # KL-divergence per batch element, then take the mean over the batch.
@@ -201,7 +183,7 @@ class ACTPolicy(
                 (-0.5 * (1 + log_sigma_x2_hat - mu_hat.pow(2) - (log_sigma_x2_hat).exp())).sum(-1).mean()
             )
             loss_dict["kld_loss"] = mean_kld.item()
-            loss_dict["loss"] = l1_loss + mean_kld * self.algo_config.kl_weight
+            loss_dict["loss"] = l1_loss + mean_kld * self.config.kl_weight
         else:
             loss_dict["loss"] = l1_loss
 
@@ -334,61 +316,61 @@ class ACT(nn.Module):
                                 └───────────────────────┘
     """
 
-    def __init__(self, algo_config: ACTConfig):
+    def __init__(self, config: ACTConfig):
         super().__init__()
-        self.algo_config = algo_config
+        self.config = config
 
         # default value for vae_state_keys are all low_dim keys  # I love semantics
-        if 'vae_state_keys' not in asdict(algo_config) or algo_config.vae_state_keys is None:
-            self.vae_state_shapes = filter_modality(algo_config.input_shapes, modality='low_dim')
+        if 'vae_state_keys' not in asdict(config) or config.vae_state_keys is None:
+            self.vae_state_shapes = filter_modality(config.input_shapes, modality='low_dim')
         else:
-            self.vae_state_shapes = algo_config.vae_state_keys
-        self._any_obs_key = list(algo_config.input_shapes)[0]
+            self.vae_state_shapes = config.vae_state_keys
+        self._any_obs_key = list(config.input_shapes)[0]
 
         # BERT style VAE encoder with input tokens [cls, robot_state, *action_sequence].
         # The cls token forms parameters of the latent's distribution (like this [*means, *log_variances]).
 
-        if self.algo_config.use_vae:
+        if self.config.use_vae:
             if self.vae_state_shapes:
                 self.vae_state_encoder = encoder_factory(
                     obs_shapes=self.vae_state_shapes,
-                    feature_dim=algo_config.dim_model,
+                    feature_dim=config.dim_model,
                     feature_aggregation='sequence'
-                )  # returns (B, S, algo_config.dim_model)
+                )  # returns (B, S, config.dim_model)
 
-            self.vae_encoder = ACTEncoder(algo_config, is_vae_encoder=True)
-            self.vae_encoder_cls_embed = nn.Embedding(1, algo_config.dim_model)
+            self.vae_encoder = ACTEncoder(config, is_vae_encoder=True)
+            self.vae_encoder_cls_embed = nn.Embedding(1, config.dim_model)
 
             # Pooling layer for action (joint-space target) to hidden dimension.
             self.vae_encoder_action_input_proj = nn.Linear(
-                algo_config.output_shapes["action"][0], algo_config.dim_model
+                config.output_shapes["action"][0], config.dim_model
             )
             # Pooling layer from the VAE encoder's output to the latent distribution's parameter space.
-            self.vae_encoder_latent_output_proj = nn.Linear(algo_config.dim_model, algo_config.latent_dim * 2)
+            self.vae_encoder_latent_output_proj = nn.Linear(config.dim_model, config.latent_dim * 2)
             # Fixed sinusoidal positional embedding for the input to the VAE encoder. Unsqueeze for batch
             # dimension.
-            num_input_token_encoder = 1 + algo_config.chunk_size + len(self.vae_state_shapes)
+            num_input_token_encoder = 1 + config.chunk_size + len(self.vae_state_shapes)
             self.register_buffer(
                 "vae_encoder_pos_enc",
-                create_sinusoidal_pos_embedding(num_input_token_encoder, algo_config.dim_model).unsqueeze(0),
+                create_sinusoidal_pos_embedding(num_input_token_encoder, config.dim_model).unsqueeze(0),
             )
 
         # Transformer (acts as VAE decoder when training with the variational objective).
-        algo_config.input_shapes['latent'] = (algo_config.latent_dim,)
+        config.input_shapes['latent'] = (config.latent_dim,)
         self.obs_encoder = encoder_factory(
-            obs_shapes=algo_config.input_shapes,
-            feature_dim=algo_config.dim_model,
+            obs_shapes=config.input_shapes,
+            feature_dim=config.dim_model,
             encoder_cls=ACTObsEncoder
         )
-        self.encoder = ACTEncoder(algo_config)
-        self.decoder = ACTDecoder(algo_config)
+        self.encoder = ACTEncoder(config)
+        self.decoder = ACTDecoder(config)
 
         # Transformer decoder.
         # Learnable positional embedding for the transformer's decoder (in the style of DETR object queries).
-        self.decoder_pos_embed = nn.Embedding(algo_config.chunk_size, algo_config.dim_model)
+        self.decoder_pos_embed = nn.Embedding(config.chunk_size, config.dim_model)
 
         # Final action regression head on the output of the transformer's decoder.
-        self.action_head = nn.Linear(algo_config.dim_model, algo_config.output_shapes["action"][0])
+        self.action_head = nn.Linear(config.dim_model, config.output_shapes["action"][0])
 
         self._reset_parameters()
 
@@ -417,7 +399,7 @@ class ACT(nn.Module):
             Tuple containing the latent PDF's parameters (mean, log(σ²)) both as (B, L) tensors where L is the
             latent dimension.
         """
-        if self.algo_config.use_vae and self.training:
+        if self.config.use_vae and self.training:
             assert (
                     "action" in batch
             ), "actions must be provided when using the variational objective in training mode."
@@ -425,7 +407,7 @@ class ACT(nn.Module):
         batch_size = batch[self._any_obs_key].shape[0]
 
         # Prepare the latent for input to the transformer encoder.
-        if self.algo_config.use_vae and "action" in batch:
+        if self.config.use_vae and "action" in batch:
             # Prepare the input to the VAE encoder: [cls, *joint_space_configuration, *action_sequence].
             cls_embed = einops.repeat(
                 self.vae_encoder_cls_embed.weight, "1 d -> b 1 d", b=batch_size
@@ -466,9 +448,9 @@ class ACT(nn.Module):
                 key_padding_mask=key_padding_mask,
             )[0]  # select the class token, with shape (B, D)
             latent_pdf_params = self.vae_encoder_latent_output_proj(cls_token_out)
-            mu = latent_pdf_params[:, : self.algo_config.latent_dim]
+            mu = latent_pdf_params[:, : self.config.latent_dim]
             # This is 2log(sigma). Done this way to match the original implementation.
-            log_sigma_x2 = latent_pdf_params[:, self.algo_config.latent_dim:]
+            log_sigma_x2 = latent_pdf_params[:, self.config.latent_dim:]
 
             # Sample the latent with the reparameterization trick.
             batch['latent'] = mu + log_sigma_x2.div(2).exp() * torch.randn_like(mu)
@@ -476,7 +458,7 @@ class ACT(nn.Module):
             # When not using the VAE encoder, we set the latent to be all zeros.
             mu = log_sigma_x2 = None
             # TODO(rcadene, alexander-soare): remove call to `.to` to speedup forward ; precompute and use buffer
-            batch['latent'] = torch.zeros([batch_size, self.algo_config.latent_dim], dtype=torch.float32).to(
+            batch['latent'] = torch.zeros([batch_size, self.config.latent_dim], dtype=torch.float32).to(
                 batch[self._any_obs_key].device
             )
 
@@ -524,7 +506,7 @@ class ACT(nn.Module):
         encoder_out = self.encoder(encoder_in_tokens, pos_embed=encoder_in_pos_embed)
         # TODO(rcadene, alexander-soare): remove call to `device` ; precompute and use buffer
         decoder_in = torch.zeros(
-            (self.algo_config.chunk_size, batch_size, self.algo_config.dim_model),
+            (self.config.chunk_size, batch_size, self.config.dim_model),
             dtype=encoder_in_pos_embed.dtype,
             device=encoder_in_pos_embed.device,
         )

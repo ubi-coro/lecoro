@@ -66,11 +66,6 @@ class DiffusionPolicy(
 
     def __init__(
         self,
-        optimizer: Callable,
-        lr_scheduler: Callable | None = None,
-        grad_clip_norm: float | None = None,
-        use_amp: bool = True,
-
         config: DiffusionConfig | None = None,
         **kwargs
     ):
@@ -81,34 +76,29 @@ class DiffusionPolicy(
             dataset_stats: Dataset statistics to be used for normalization. If not passed here, it is expected
                 that they will be passed with a call to `load_state_dict` before the policy is used.
         """
-        LeRobotPolicy.__init__(self, optimizer, lr_scheduler, grad_clip_norm, use_amp)
-
         if config is None:
             config = DiffusionConfig()
-        self.algo_config: DiffusionConfig = replace(config, **kwargs)
+        LeRobotPolicy.__init__(self, config, **kwargs)
 
         # queues are populated during rollout of the policy, they contain the n latest observations and actions
         self._queues = None
 
     def _create_model(self):
-        self.algo_config.input_shapes = self.input_shapes
-        self.algo_config.output_shapes = self.output_shapes
-
-        self.model = DiffusionModel(self.algo_config)
+        self.model = DiffusionModel(self.config)
 
     def reset(self):
         """Clear observation and action queues. Should be called on `env.reset()`"""
-        self._queues = {"action": deque(maxlen=self.algo_config.n_action_steps)}
-        for key in self.input_shapes:
-            self._queues[key] = deque(maxlen=self.algo_config.n_action_steps)
+        self._queues = {"action": deque(maxlen=self.config.n_action_steps)}
+        for key in self.config.input_shapes:
+            self._queues[key] = deque(maxlen=self.config.n_obs_steps)
 
     def get_delta_timestamps(self, fps: float) -> dict:
         action_ts = {
-            'action': [i / fps for i in range(1 - self.algo_config.n_obs_steps, 1 - self.algo_config.n_obs_steps + self.algo_config.horizon)]
+            'action': [i / fps for i in range(1 - self.config.n_obs_steps, 1 - self.config.n_obs_steps + self.config.horizon)]
         }
         obs_ts = {
-            key: [i / fps for i in range(1 - self.algo_config.n_obs_steps, 1)]
-            for key in self.input_shapes
+            key: [i / fps for i in range(1 - self.config.n_obs_steps, 1)]
+            for key in self.config.input_shapes
         }
         return obs_ts | action_ts
 
