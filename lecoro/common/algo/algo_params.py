@@ -100,11 +100,11 @@ def register_configs():
     Store different unets for diffusion
     ================================================
     """
-    from coro.common.model.diffusion_nets import ConditionalUnet1D  # import here to avoid circular import
-    NESTED_PARAM_TO_CHOICES[ConditionalUnet1D] = {
-        'default': builds(ConditionalUnet1D, **hydra_partial),
-    }
-    NESTED_PARAM_TO_DEFAULTS[ConditionalUnet1D] = 'default'
+    #from lecoro.common.model.diffusion_nets import ConditionalUnet1D  # import here to avoid circular import
+    #NESTED_PARAM_TO_CHOICES[ConditionalUnet1D] = {
+    #    'default': builds(ConditionalUnet1D, **hydra_partial),
+    #}
+    #NESTED_PARAM_TO_DEFAULTS[ConditionalUnet1D] = 'default'
 
 def get_scheduler(
     name: str,

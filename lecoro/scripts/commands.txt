@@ -1,0 +1,6 @@
++experiment=real_aloha_towel workspace=record_basic dataset_repo_id=jannick-st/test +workspace.store_dataset=false +workspace.pretrained_algo_name_or_path=/home/jstranghoener/lecoro/outputs/train/2025-01-27/13-46-06_act_train_offline/checkpoints/last/pretrained_model/
+
+
+python record.py env=aloha env.calibration_dir=".cache/calibration/aloha_current" dataset_repo_id=jannick-st/aloha_real_plugging +push_to_hub=false +recorder.play_sounds=false ~env.follower_arms.right ~env.leader_arms.right ~env.cameras.cam_right_wrist resume=False
+
+python train_offline.py +experiment=aloha_act_real_plugging; python train_offline.py +experiment=aloha_diffusion_real_plugging

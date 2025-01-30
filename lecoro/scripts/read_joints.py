@@ -1,5 +1,6 @@
 import hydra
 from hydra_zen import instantiate
+import time
 
 from lecoro.common.config_gen import Config, register_configs
 from lecoro.common.logger import Logger
@@ -25,11 +26,13 @@ def control_robot(cfg: Config):
     env = instantiate(cfg.env)
     env.connect()
 
-    # compare requested obs_keys in the config file to the available ones in the environment
-    obs_keys = merge_obs_keys(obs_config, env)
+    assert 'observation.low_dim.qpos' in env.observation_space
 
-    # build and run workspace
-    instantiate(cfg.workspace, env=env, obs_keys=obs_keys).run()
+    env.toggle_torque(follower=False)
+    while True:
+        time.sleep(0.1)
+        print(env.capture_observation()['observation.low_dim.qpos'].detach().numpy())
+
 
 
 if __name__ == "__main__":

@@ -203,8 +203,13 @@ class SpatialMeanPool(Pooling):
 @register_projection()
 class Flatten(Pooling):
     def __init__(self, input_shape: tuple[int], feature_dim: int | None = None):
+        if feature_dim is None:
+            projection = nn.Identity()
+            feature_dim = np.prod(input_shape)
+        else:
+            projection = nn.Linear(np.prod(input_shape), feature_dim)
         super().__init__(input_shape, feature_dim)
-        self.projection = nn.Linear(np.prod(input_shape), feature_dim)
+        self.projection = projection
 
     def output_shape(self, input_shape=None):
         """

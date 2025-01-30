@@ -3,7 +3,7 @@ from typing import Dict
 
 import gymnasium as gym
 
-from coro.common.config_gen.env.base import ManipulatorEnvConfig
+from lecoro.common.envs.config_gen import ManipulatorEnvConfig
 
 
 class ManipulatorEnv(gym.Env, ABC):
@@ -26,6 +26,11 @@ class ManipulatorEnv(gym.Env, ABC):
     @property
     @abstractmethod
     def fps(self):
+        pass
+
+    @property
+    @abstractmethod
+    def is_connected(self):
         pass
 
     @abstractmethod

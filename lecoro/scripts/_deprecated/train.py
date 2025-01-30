@@ -47,7 +47,7 @@ from lecoro.common.utils.utils import (
     init_logging,
     set_global_seed,
 )
-from lecoro.scripts.eval import eval_policy
+from lecoro.scripts.eval import eval_algo
 
 
 def make_optimizer_and_scheduler(cfg, policy):

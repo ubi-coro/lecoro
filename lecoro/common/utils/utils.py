@@ -69,10 +69,10 @@ def get_package_root():
 
     # Traverse up until the package root is located
     for parent in current_dir.parents:
-        if (parent / 'coro').is_dir() and (parent / 'coro').resolve() == parent / 'coro':
+        if (parent / 'lecoro').is_dir() and (parent / 'lecoro').resolve() == parent / 'lecoro':
             return parent
 
-    raise RuntimeError("Could not locate the 'coro' package root.")
+    raise RuntimeError("Could not locate the 'lecoro' package root.")
 
 
 def get_global_random_state() -> dict[str, Any]:
@@ -172,11 +172,15 @@ def _relative_path_between(path1: Path, path2: Path) -> Path:
         )
 
 
-def init_hydra_config(config_path: str, overrides: list[str] | None = None) -> DictConfig:
+def init_hydra_config(config_path: str, overrides: str | list[str] | None = None) -> DictConfig:
     """Initialize a Hydra config given only the path to the relevant config file.
 
     For config resolution, it is assumed that the config file's parent is the Hydra config dir.
     """
+    # Ensure overrides is a list if given as a string
+    if isinstance(overrides, str):
+        overrides = overrides.split()
+
     # TODO(alexander-soare): Resolve configs without Hydra initialization.
     hydra.core.global_hydra.GlobalHydra.instance().clear()
     # Hydra needs a path relative to this file.

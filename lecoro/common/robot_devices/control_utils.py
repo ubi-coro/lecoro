@@ -19,7 +19,7 @@ from termcolor import colored
 from lecoro.common.config_gen import Config
 from lecoro.common.datasets.image_writer import safe_stop_image_writer
 from lecoro.common.datasets.lerobot_dataset import LeRobotDataset
-from lecoro.common.datasets.utils import get_features_from_robot
+from lecoro.common.datasets.utils import get_features_from_robot, DEFAULT_FEATURES, remove_modality_prefix
 from lecoro.common.algo.factory import make_algo
 from lecoro.common.utils.utils import log_say
 from lecoro.common.robot_devices.robots.utils import Robot
@@ -102,14 +102,11 @@ def predict_action(observation, policy, device, use_amp):
         torch.inference_mode(),
         torch.autocast(device_type=device.type) if device.type == "cuda" and use_amp else nullcontext(),
     ):
-        # should replace below
+        observation = {remove_modality_prefix(key): value for key, value in observation.items()}
         observation = process_obs_dict(observation)
 
-        # Convert to pytorch format: channel first and float32 in [0,1] with batch dimension
+        # Convert to pytorch format: channel first and float32 ywith batch dimension
         for name in observation:
-            if "image" in name:
-                observation[name] = observation[name].type(torch.float32) / 255
-                observation[name] = observation[name].permute(2, 0, 1).contiguous()
             observation[name] = observation[name].unsqueeze(0)
             observation[name] = observation[name].to(device)
 
@@ -192,7 +189,7 @@ def init_keyboard_listener(use_foot_switch=False, play_sounds=False):
 
 
 def sanity_check_dataset_compatibility(
-    dataset: LeRobotDataset, features: Dict, robot_type, fps: float
+    dataset: LeRobotDataset, features: dict, robot_type, fps: float
 ) -> None:
     dataset_feature_keys = set(dataset.features.keys()) - set(DEFAULT_FEATURES.keys())
     dataset_features = {key: dataset.features[key] for key in dataset_feature_keys}
@@ -219,10 +216,10 @@ def init_algo(pretrained_algo_name_or_path, algo_overrides):
     """Instantiate the algo and load fps, device and use_amp from config yaml"""
     pretrained_algo_path = get_pretrained_algo_path(pretrained_algo_name_or_path)
     hydra_cfg: Config = init_hydra_config(pretrained_algo_path / "config.yaml", algo_overrides)
-    algo = make_algo(hydra_cfg=hydra_cfg, pretrained_algo_name_or_path=pretrained_algo_path)
+    algo = make_algo(cfg=hydra_cfg, pretrained_algo_name_or_path=pretrained_algo_path)
 
     # Check device is available
-    device = get_safe_torch_device(hydra_cfg.device, log=True)
+    device = get_safe_torch_device(hydra_cfg.training.device, log=True)
     use_amp = hydra_cfg.algo.get('use_amp', False)
     algo_fps = hydra_cfg.env.fps
 

@@ -1,0 +1,1 @@
+ ffmpeg -f image2 -r 50 -i /home/jstranghoener/lecoro/datasets/jannick-st/test/images/observation.rgb.cam_left_wrist/episode_000000/frame_%06d.png -vcodec libx264 -pix_fmt yuv420p -g 2 -crf 30 -loglevel error -y /home/jstranghoener/lecoro/datasets/jannick-st/test/videos/chunk-000/observation.rgb.cam_left_wrist/episode_000000.mp4

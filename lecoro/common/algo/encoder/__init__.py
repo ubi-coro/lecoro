@@ -72,6 +72,8 @@ class ObservationEncoder(nn.Module):
         assert not self._locked, "ObservationEncoder: @register_obs_key called after @make"
         assert name not in self.in_shapes, f"ObservationEncoder: modality {name} already exists"
         assert not is_image_key or len(shape) == 3, f"ObservationEncoder: all image modalities must have shape (C, H, W)"
+        assert share_backbone_from is None or share_backbone_from in self.backbones, \
+            f"ObservationEncoder: cannot share backbone from missing key {share_backbone_from}"
 
         if pooling_kwargs is None:
             pooling_kwargs = dict()
@@ -155,7 +157,8 @@ class ObservationEncoder(nn.Module):
         for key in self.in_shapes:
             if self.share_backbone[key] is not None:
                 # make sure net is shared with another modality
-                self.backbones[key] = self.backbone[self.share_backbone[key]]
+                del self.backbones[key]
+                self.backbones[key] = self.backbones[self.share_backbone[key]]
 
     def forward(self, obs_dict):
         """
@@ -316,6 +319,7 @@ def encoder_factory(
     enc = encoder_cls(feature_dim=feature_dim, feature_aggregation=feature_aggregation, **encoder_kwargs)
     assert isinstance(enc, ObservationEncoder)
 
+    first_key_per_modality = {}
     for k, obs_shape in obs_shapes.items():
         obs_modality = ObsUtils.OBS_KEYS_TO_MODALITIES[k]
 
@@ -331,6 +335,13 @@ def encoder_factory(
 
         if k in encoder_overwrites:
             kwargs.update(compose_encoder_overwrites(k, encoder_overwrites))
+
+        # if we want to share backbones keys, we store the first occurrence of each modality
+        if ObsUtils.DEFAULT_SHARE_BACKBONES[obs_modality]:
+            if obs_modality not in first_key_per_modality:
+                first_key_per_modality[obs_modality] = k
+            else:
+                kwargs["share_backbone_from"] = first_key_per_modality[obs_modality]
 
         enc.register_obs_key(**kwargs)
 

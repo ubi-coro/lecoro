@@ -1,0 +1,51 @@
+# @package _global_
+defaults:
+  - override /algo: lerobot_act
+  - override /env: aloha
+  - override /observation: aloha_v2
+  - override /workspace: record_basic
+  - override /training: basic_offline
+  - _self_
+
+resume: false
+seed: 42
+root: /media/nvme1/jstranghoener/lecoro/
+dataset_repo_id: jannick-st/aloha_real_plugging
+video_backend: pyav
+debug: false
+
+training:
+  offline_steps: 120000
+  batch_size: 8
+
+  dataset:
+    local_files_only: true
+
+eval:
+  enable: false
+  frequency: 1000
+  batch_size: 50
+  n_episodes: 50
+
+checkpoint:
+  enable: true
+  frequency: 5000
+
+logging:
+  frequency: 50
+  enable_system_metrics_logging: true
+
+wandb:
+  enable: true
+  # Set to true to disable saving an artifact despite save_checkpoint == True
+  disable_artifact: true
+  project: ubi
+  notes: ""
+
+hydra:
+  run:
+    # Set `dir` to where you would like to save all of the run outputs. If you run another training session
+    # with the same value for `dir` its contents will be overwritten unless you set `resume` to true.
+    dir: ${root}/outputs/train${debug-suffix:${debug}}/${now:%Y-%m-%d}/${now:%H-%M-%S}_${algo.name}_${hydra.job.name}
+
+

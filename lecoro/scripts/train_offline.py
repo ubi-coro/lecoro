@@ -21,11 +21,9 @@ from lecoro.common.datasets.utils import cycle
 from lecoro.common.utils.utils import init_hydra_config
 from lecoro.scripts.eval import eval_algo
 
-from lerobot.common.utils.utils import format_big_number, init_logging
 from lecoro.common.utils.obs_utils import initialize_obs_utils_with_config
-from lecoro.common.utils.utils import set_global_seed
+from lecoro.common.utils.utils import set_global_seed, get_safe_torch_device, format_big_number, init_logging
 from lecoro.common.utils.tensor_utils import to_device
-from lecoro.common.utils.torch_utils import get_safe_torch_device
 
 register_configs()
 
@@ -110,6 +108,7 @@ def train(cfg: Config, out_dir: str | None = None, job_name: str | None = None):
         raise NotImplementedError()
 
     init_logging()
+    logging.info(pformat(OmegaConf.to_container(cfg)))
 
     if cfg.resume:
         if not Logger.get_last_checkpoint_dir(out_dir).exists():
@@ -141,7 +140,7 @@ def train(cfg: Config, out_dir: str | None = None, job_name: str | None = None):
                 "takes precedence.",
             )
         # Use the checkpoint config instead of the provided config (but keep `resume` parameter).
-        cfg = checkpoint_cfg
+        #cfg = checkpoint_cfg
         cfg.resume = True
     elif Logger.get_last_checkpoint_dir(out_dir).exists():
         raise RuntimeError(
@@ -301,7 +300,7 @@ def train_cli(cfg: dict):
     )
 
 
-def train_notebook(out_dir=None, job_name=None, config_name="train_offline", config_path="../config"):
+def train_notebook(out_dir=None, job_name=None, config_name="default", config_path="../config"):
     from hydra import compose, initialize
 
     hydra.core.global_hydra.GlobalHydra.instance().clear()

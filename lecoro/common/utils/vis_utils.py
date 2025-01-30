@@ -6,8 +6,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 
-import coro.common.utils.tensor_utils as TensorUtils
-import coro.common.utils.obs_utils as ObsUtils
+import lecoro.common.utils.tensor_utils as TensorUtils
+import lecoro.common.utils.obs_utils as ObsUtils
 
 
 def image_tensor_to_numpy(image):

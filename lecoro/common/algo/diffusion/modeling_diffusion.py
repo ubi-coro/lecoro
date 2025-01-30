@@ -245,7 +245,7 @@ class DiffusionModel(nn.Module):
             "observation.environment_state": (B, environment_dim)
         }
         """
-        batch_size, n_obs_steps = batch["observation.state"].shape[:2]
+        batch_size, n_obs_steps = batch[self._any_obs_key].shape[:2]
         assert n_obs_steps == self.config.n_obs_steps
 
         # Encode image features and concatenate them all together along with the state vector.
@@ -578,6 +578,7 @@ class DiffusionConditionalUnet1d(nn.Module):
         }
         self.down_modules = nn.ModuleList([])
         for ind, (dim_in, dim_out) in enumerate(in_out):
+            print(f"Encoder {ind}")
             is_last = ind >= (len(in_out) - 1)
             self.down_modules.append(
                 nn.ModuleList(
@@ -605,6 +606,7 @@ class DiffusionConditionalUnet1d(nn.Module):
         # Unet decoder.
         self.up_modules = nn.ModuleList([])
         for ind, (dim_out, dim_in) in enumerate(reversed(in_out[1:])):
+            print(f"Decoder {ind}")
             is_last = ind >= (len(in_out) - 1)
             self.up_modules.append(
                 nn.ModuleList(

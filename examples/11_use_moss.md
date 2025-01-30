@@ -227,7 +227,7 @@ python lecoro/scripts/control_robot.py replay \
 
 ## Train a policy
 
-To train a policy to control your robot, use the [`python lerobot/scripts/train.py`](../lecoro/scripts/train.py) script. A few arguments are required. Here is an example command:
+To train a policy to control your robot, use the [`python lerobot/scripts/train.py`](../lecoro/scripts/_deprecated/train.py) script. A few arguments are required. Here is an example command:
 ```bash
 python lecoro/scripts/train.py \
   dataset_repo_id=${HF_USER}/moss_test \
@@ -250,7 +250,7 @@ Training should take several hours. You will find checkpoints in `outputs/train/
 
 ## Evaluate your policy
 
-You can use the `record` function from [`lerobot/scripts/control_robot.py`](../lecoro/scripts/control_robot_old.py) but with a policy checkpoint as input. For instance, run this command to record 10 evaluation episodes:
+You can use the `record` function from [`lerobot/scripts/control_robot.py`](../lecoro/scripts/_deprecated/control_robot_old.py) but with a policy checkpoint as input. For instance, run this command to record 10 evaluation episodes:
 ```bash
 python lecoro/scripts/control_robot.py record \
   --robot-path lecoro/configs/robot/moss.yaml \

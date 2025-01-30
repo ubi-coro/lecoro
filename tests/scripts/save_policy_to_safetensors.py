@@ -22,7 +22,7 @@ from safetensors.torch import save_file
 from lecoro.common.datasets.factory import make_dataset
 from lecoro.common.algo.factory import make_policy
 from lecoro.common.utils.utils import init_hydra_config, set_global_seed
-from lecoro.scripts.train import make_optimizer_and_scheduler
+from lecoro.scripts._deprecated.train import make_optimizer_and_scheduler
 from tests.utils import DEFAULT_CONFIG_PATH
 
 

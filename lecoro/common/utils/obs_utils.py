@@ -13,13 +13,14 @@ import torch
 
 from lecoro.common.algo.encoder.config_gen import (
     DEFAULT_BACKBONES,
+    DEFAULT_SHARE_BACKBONES,
     DEFAULT_DROPOUT,
     DEFAULT_POOLINGS,
     DEFAULT_NORMS,
     DEFAULT_ACTIVATIONS,
     DEFAULT_RANDOMIZERS
 )
-import coro.common.utils.tensor_utils as TU
+import lecoro.common.utils.tensor_utils as TU
 
 
 # MACRO FOR VALID IMAGE CHANNEL SIZES
@@ -96,8 +97,8 @@ class ObservationKeyToModalityDict(dict):
     def __getitem__(self, item):
         # If a key doesn't already exist, warn the user and add default mapping
         if item not in self.keys():
-            print(f"ObservationKeyToModalityDict: {item} not found,"
-                  f" adding {item} to mapping with assumed low_dim modality!")
+            #print(f"ObservationKeyToModalityDict: {item} not found,"
+            #      f" adding {item} to mapping with assumed low_dim modality!")
             self.__setitem__(item, "low_dim")
         return super(ObservationKeyToModalityDict, self).__getitem__(item)
 
@@ -211,6 +212,7 @@ def initialize_default_obs_encoder(obs_encoder_config: 'EncoderConfig'):
     """
     for modality, encoder_core in obs_encoder_config.items():
         DEFAULT_BACKBONES[modality] = encoder_core.backbone
+        DEFAULT_SHARE_BACKBONES[modality] = encoder_core.share_backbone
         DEFAULT_DROPOUT[modality] = encoder_core.dropout
         DEFAULT_POOLINGS[modality] = encoder_core.projection
         DEFAULT_NORMS[modality] = encoder_core.norm

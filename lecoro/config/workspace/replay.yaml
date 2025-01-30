@@ -1,0 +1,7 @@
+_target_: lecoro.common.workspace.demonstration.DemonstrationReplay
+
+root: ${root}/datasets/${dataset_repo_id}
+dataset_repo_id: ${dataset_repo_id}
+local_files_only: True
+
+

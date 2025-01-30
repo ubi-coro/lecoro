@@ -1,5 +1,5 @@
 import inspect
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from functools import partial
 from typing import Callable
 
@@ -198,12 +198,17 @@ class AlgoConfig:
     output_shapes: dict[str, tuple[int]] | None = None
     output_shapes: dict[str, tuple[int]] | None = None
 
+
 @dataclass
 class LeRobotConfig(AlgoConfig):
     optimizer: Callable = partial(Adam, lr=0.0003, weight_decay=1e-4)
     lr_scheduler: Callable | None = None
     grad_clip_norm: float | None = None
     use_amp: bool = True
+
+    def items(self):
+        """Returns a view object that displays a list of dataclass fields and their values."""
+        return ((field.name, getattr(self, field.name)) for field in fields(self))
 
 
 if __name__ == "__main__":

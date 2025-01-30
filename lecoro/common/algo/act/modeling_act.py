@@ -83,12 +83,12 @@ class ACTPolicy(
             dataset_stats: Dataset statistics to be used for normalization. If not passed here, it is expected
                 that they will be passed with a call to `load_state_dict` before the policy is used.
         """
+        self.temporal_ensembler = None
+        self._action_queue = None
+
         if config is None:
             config = ACTConfig()
         LeRobotPolicy.__init__(self, config, **kwargs)
-
-        self.temporal_ensembler = None
-        self._action_queue = None
 
     def _create_model(self):
         self.model = ACT(config=self.config)
@@ -140,15 +140,12 @@ class ACTPolicy(
         self.eval()
 
         batch = self.normalize_inputs(obs_dict)
-        if len(self.expected_image_keys) > 0:
-            batch = dict(batch)  # shallow copy so that adding a key doesn't modify the original
-            batch["observation.images"] = torch.stack([batch[k] for k in self.expected_image_keys], dim=-4)
 
         # If we are doing temporal ensembling, do online updates where we keep track of the number of actions
         # we are ensembling over.
         if self.config.temporal_ensemble_coeff is not None:
             actions = self.model(batch)[0]  # (batch_size, chunk_size, action_dim)
-            actions = self.unnormalize_outputs({"action": actions})["action"]
+            #actions = self.unnormalize_outputs({"action": actions})["action"]
             action = self.temporal_ensembler.update(actions)
             return action
 
@@ -167,6 +164,9 @@ class ACTPolicy(
 
     def compute_loss(self, batch: dict[str, Tensor]) -> dict[str, Tensor]:
         """Run the batch through the model and compute the loss for training or validation."""
+        batch = self.normalize_inputs(batch)
+        batch = self.normalize_targets(batch)
+
         actions_hat, (mu_hat, log_sigma_x2_hat) = self.model(batch)
 
         l1_loss = (

@@ -1,24 +1,23 @@
-from pathlib import Path
 import copy
-from dataclasses import replace
 import json
-
-import numpy as np
-from gymnasium.core import RenderFrame
-from pynput import keyboard
 import time
+from dataclasses import replace
+from pathlib import Path
 from typing import Dict
 
-import torch
 import gymnasium as gym
+import numpy as np
+import torch
+from gymnasium.core import RenderFrame
+from pynput import keyboard
 
-from lecoro.common.config_gen.env.aloha import AlohaManipulatorConfig
-from coro.common.env.base import ManipulatorEnv
-from coro.common.devices.robots.dynamixel import BaseManipulator
-from coro.common.utils.action_utils import ensure_safe_goal_position
-from coro.common.utils.file_utils import get_package_root
-from coro.common.utils.video_utils import Displayer
-from coro.common.utils.robot_utils import get_arm_id, RobotDeviceAlreadyConnectedError, RobotDeviceNotConnectedError
+from lecoro.common.envs.aloha.config_gen import AlohaManipulatorConfig
+from lecoro.common.envs.env_protocol import ManipulatorEnv
+from lecoro.common.envs.utils import Displayer, ensure_safe_goal_position
+from lecoro.common.robot_devices.robots.dynamixel import DynamixelActuator
+from lecoro.common.robot_devices.robots.utils import get_arm_id
+from lecoro.common.robot_devices.utils import RobotDeviceAlreadyConnectedError, RobotDeviceNotConnectedError
+from lecoro.common.utils.utils import get_package_root
 
 
 class AlohaManipulatorEnv(ManipulatorEnv):
@@ -33,8 +32,8 @@ class AlohaManipulatorEnv(ManipulatorEnv):
         self.calibration_dir = get_package_root() / Path(calibration_dir)
 
         self.robot_type = self.config.robot_type
-        self.leader_arms: Dict[str, BaseManipulator] = self.config.leader_arms
-        self.follower_arms: Dict[str, BaseManipulator] = self.config.follower_arms
+        self.leader_arms: Dict[str, DynamixelActuator] = self.config.leader_arms
+        self.follower_arms: Dict[str, DynamixelActuator] = self.config.follower_arms
 
         self.cameras = self.config.cameras
         self.botas = self.config.botas
@@ -45,7 +44,7 @@ class AlohaManipulatorEnv(ManipulatorEnv):
         self.last_step_ts = 0.0
         self.max_episode_length = self.config.max_episode_length
         self.max_relative_target = self.config.max_relative_target
-        self.is_connected = False
+        self._is_connected = False
         self.logs = {}
 
         # define action and obs spaces
@@ -82,7 +81,7 @@ class AlohaManipulatorEnv(ManipulatorEnv):
         self.listener = keyboard.Listener(on_press=on_press)
         self.listener.start()
 
-    def get_joint_names(self, arm: dict[str, BaseManipulator]) -> list:
+    def get_joint_names(self, arm: dict[str, DynamixelActuator]) -> list:
         return [f"{arm}_{joint}" for arm, manipulator in arm.items() for joint in manipulator.joint_names]
 
     @property
@@ -123,6 +122,10 @@ class AlohaManipulatorEnv(ManipulatorEnv):
         return self.config.fps
 
     @property
+    def is_connected(self):
+        return self._is_connected
+
+    @property
     def produces_videos(self):
         return self.has_camera
 
@@ -154,7 +157,7 @@ class AlohaManipulatorEnv(ManipulatorEnv):
         return available_arms
 
     def connect(self):
-        if self.is_connected:
+        if self._is_connected:
             raise RobotDeviceAlreadyConnectedError(
                 "ManipulatorRobot is already connected. Do not run `robot.connect()` twice."
             )
@@ -200,7 +203,7 @@ class AlohaManipulatorEnv(ManipulatorEnv):
         for name in self.botas:
             self.botas[name].connect()
 
-        self.is_connected = True
+        self._is_connected = True
 
     def toggle_torque(self,
                       leader=True, leader_joints=None,
@@ -240,7 +243,7 @@ class AlohaManipulatorEnv(ManipulatorEnv):
                 input(f"Make sure the arm can be torqued off and press Enter to proceed with calibration!")
 
                 arm.torque_off()
-                calibration = arm.run_arm_calibration(name, arm_type)
+                calibration = arm.run_arm_calibration('aloha', name, arm_type)
 
                 print(f"Calibration is done! Saving calibration file '{arm_calib_path}'")
                 arm_calib_path.parent.mkdir(parents=True, exist_ok=True)
@@ -257,7 +260,7 @@ class AlohaManipulatorEnv(ManipulatorEnv):
             arm.set_calibration(calibration)
 
     def step(self, action):
-        if not self.is_connected:
+        if not self._is_connected:
             raise RobotDeviceNotConnectedError(
                 "ManipulatorRobot is not connected. You need to run `robot.connect()`."
             )
@@ -294,6 +297,11 @@ class AlohaManipulatorEnv(ManipulatorEnv):
         return obs, {"succeed": False}
 
     def send_action(self, action):
+        # sleep to match frequency
+        dt = time.perf_counter() - self.last_step_ts
+        time.sleep(max([0, 1 / self.config.fps - dt]))
+        self.last_step_ts = time.perf_counter()
+
         from_idx = 0
         to_idx = 0
         action_sent = []
@@ -325,7 +333,7 @@ class AlohaManipulatorEnv(ManipulatorEnv):
     def teleop_step(
             self, record_data=False
     ) -> None | tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
-        if not self.is_connected:
+        if not self._is_connected:
             raise RobotDeviceNotConnectedError(
                 "ManipulatorRobot is not connected. You need to run `robot.connect()`."
             )
@@ -361,7 +369,7 @@ class AlohaManipulatorEnv(ManipulatorEnv):
         # TODO(aliberts): move robot-specific logs logic here
 
     def disconnect(self):
-        if not self.is_connected:
+        if not self._is_connected:
             raise RobotDeviceNotConnectedError(
                 "ManipulatorRobot is not connected. You need to run `robot.connect()` before disconnecting."
             )
@@ -378,7 +386,7 @@ class AlohaManipulatorEnv(ManipulatorEnv):
         for name in self.botas:
             self.botas[name].disconnect()
 
-        self.is_connected = False
+        self._is_connected = False
 
     def close(self):
         try:

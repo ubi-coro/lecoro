@@ -366,7 +366,7 @@ def to_float(x):
     return recursive_dict_list_tuple_apply(
         x,
         {
-            torch.Tensor: lambda x: x.float(),
+            torch.Tensor: lambda x: x.type(torch.float32),
             np.ndarray: lambda x: x.astype(np.float32),
             type(None): lambda x: x,
         }

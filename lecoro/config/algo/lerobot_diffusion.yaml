@@ -1,0 +1,45 @@
+# @package _global_
+defaults:
+  - /algo/diffusion  # which contains default act parameterization and default encoder
+  - override /observation/encoder/rgb/backbone: resnet18_pretrained
+  - override /algo/optimizer: adam
+  - override /algo/lr_scheduler: cosine-with-warmup
+  - _self_
+
+algo:
+  grad_clip_norm: 10
+
+  n_obs_steps: 2
+  horizon: 16
+  n_action_steps: 8
+
+  # Unet.
+  down_dims: [ 512, 1024, 2048 ]
+  kernel_size: 5
+  n_groups: 8
+  diffusion_step_embed_dim: 128
+  use_film_scale_modulation: True
+  # Noise scheduler.
+  noise_scheduler_type: DDPM
+  num_train_timesteps: 100
+  beta_schedule: squaredcos_cap_v2
+  beta_start: 0.0001
+  beta_end: 0.02
+  prediction_type: epsilon # epsilon / sample
+  clip_sample: True
+  clip_sample_range: 1.0
+
+  optimizer:
+    lr: 1e-4
+    weight_decay: 1e-6
+    eps: 1e-8
+    betas: [0.95, 0.999]
+
+  lr_scheduler:
+    num_warmup_steps: 500
+
+training:
+  batch_size: 64
+
+
+

@@ -15,7 +15,7 @@ import torch.nn.functional as F
 from torchvision import models as vision_models
 from torchvision import transforms
 
-import coro.common.utils.tensor_utils as TensorUtils
+import lecoro.common.utils.tensor_utils as TensorUtils
 
 CONV_ACTIVATIONS = {
     "relu": nn.ReLU,

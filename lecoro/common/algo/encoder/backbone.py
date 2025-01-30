@@ -2,13 +2,13 @@ import abc
 import math
 from functools import partial
 
-import einops
 import timm.models.vision_transformer
 import torch
 import torch.nn as nn
 from timm.models.vision_transformer import resize_pos_embed
 from torchvision import models as vision_models
 from torchvision import transforms
+from torchvision.ops.misc import FrozenBatchNorm2d
 
 from lecoro.common.algo.encoder.config_gen import register_backbone
 from lecoro.common.algo.base_nets import CoordConv2d, ShallowConv
@@ -21,7 +21,6 @@ Register Backbones
 """
 
 @register_backbone(modality='rgb')
-@register_backbone(name='resnet18_pretrained', modality='rgb', weights="ResNet18_Weights.IMAGENET1K_V1")
 def resnet18(input_shape, norm_cfg={"name": "batch_norm"}, **kwargs):
     model = ResNet(input_shape, size=18, norm_cfg=norm_cfg, **kwargs)
     return model
@@ -149,6 +148,7 @@ class ShallowConv(Backbone):
         return [self._output_channel, out_h, out_w]
 
 
+@register_backbone(name='resnet18_pretrained', modality='rgb', weights="ResNet18_Weights.IMAGENET1K_V1")
 class ResNet(Backbone):
     """
     A ResNet18 block that can be used to process input images.
@@ -177,7 +177,7 @@ class ResNet(Backbone):
         norm_layer = _make_norm(norm_cfg)
         model = _construct_resnet(size, norm_layer, weights, replace_final_stride_with_dilation)
 
-        assert not (input_coord_conv and frozen), 'You cannot a new layer to a freozen pretrained model'
+        assert not (input_coord_conv and frozen), 'You cannot a new layer for a frozen pretrained model'
 
         if input_coord_conv:
             model.conv1 = CoordConv2d(input_shape[0], 64, kernel_size=7, stride=2, padding=3, bias=False)
@@ -384,11 +384,7 @@ class VisionTransformer(Backbone):
     ):
         assert use_cls and not global_pool, "token counting only works for use_cls mode"
         model = timm.models.vision_transformer.VisionTransformer(img_size=input_shape[1:3], patch_size=patch_size,
-                                                                 embed_dim=embed_dim, depth=depth,
-                                                                 num_heads=num_heads, mlp_ratio=mlp_ratio,
-                                                                 qkv_bias=qkv_bias,
-                                                                 norm_layer=norm_layer, drop_path_rate=drop_path_rate,
-                                                                 **kwargs)
+                                                    **kwargs)
         super().__init__(input_shape, model, restore_path=False)  # we handle restoring from path later
         self._model.classifier_feature = "use_cls_token" if use_cls else "global_pool"
         self.mask_ratio = mask_ratio
@@ -483,15 +479,16 @@ def _construct_resnet(size, norm, weights=None, replace_final_stride_with_dilati
     replace_stride_with_dilation = [False, False, replace_final_stride_with_dilation]
     if size == 18:
         w = vision_models.ResNet18_Weights
-        m = vision_models.resnet18(norm_layer=norm, replace_stride_with_dilation=replace_stride_with_dilation)
+        m = vision_models.resnet18(weights=w, norm_layer=norm, replace_stride_with_dilation=replace_stride_with_dilation)
     elif size == 34:
         w = vision_models.ResNet34_Weights
-        m = vision_models.resnet34(norm_layer=norm, replace_stride_with_dilation=replace_stride_with_dilation)
+        m = vision_models.resnet34(weights=w, norm_layer=norm, replace_stride_with_dilation=replace_stride_with_dilation)
     elif size == 50:
         w = vision_models.ResNet50_Weights
-        m = vision_models.resnet50(norm_layer=norm, replace_stride_with_dilation=replace_stride_with_dilation)
+        m = vision_models.resnet50(weights=w, norm_layer=norm, replace_stride_with_dilation=replace_stride_with_dilation)
     else:
         raise NotImplementedError(f"Missing size: {size}")
+    return m
 
     if weights is not None:
         w = w.verify(weights).get_state_dict(progress=True)
@@ -509,7 +506,7 @@ def _make_norm(norm_cfg):
     if norm_cfg["name"] == "batch_norm":
         return nn.BatchNorm2d
     if norm_cfg["name"] == "frozen_batch_norm":
-        return nn.FrozenBatchNorm2d
+        return FrozenBatchNorm2d
     if norm_cfg["name"] == "group_norm":
         num_groups = norm_cfg["num_groups"]
         return lambda num_channels: nn.GroupNorm(num_groups, num_channels)

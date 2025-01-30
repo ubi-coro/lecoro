@@ -1,4 +1,6 @@
 _target_: lecoro.common.workspace.demonstration.DemonstrationRecorder
 
+root: ${root}/datasets/${dataset_repo_id}
+dataset_repo_id: ${dataset_repo_id}
 
 

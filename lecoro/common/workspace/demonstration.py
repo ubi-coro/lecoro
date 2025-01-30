@@ -8,7 +8,6 @@ from lecoro.common.datasets.lerobot_dataset import LeRobotDataset
 from lecoro.common.datasets.utils import remove_modality_prefix
 from lecoro.common.envs.env_protocol import ManipulatorEnv
 from lecoro.common.robot_devices.control_utils import init_algo, init_keyboard_listener, predict_action, sanity_check_dataset_compatibility
-from lecoro.common.utils.obs_utils import is_image_modality, OBS_KEYS_TO_MODALITIES
 from lecoro.common.utils.utils import log_say
 from lecoro.common.workspace.config_gen import DemonstrationRecorderConfig
 
@@ -40,6 +39,7 @@ class DemonstrationRecorder:
         self.obs_keys = obs_keys
         self.dataset = None
 
+        from lecoro.common.utils.obs_utils import is_image_modality, OBS_KEYS_TO_MODALITIES
         self.img_keys = [
             k for k in self.obs_keys if
             is_image_modality(OBS_KEYS_TO_MODALITIES[remove_modality_prefix(k)])
@@ -49,21 +49,22 @@ class DemonstrationRecorder:
             not is_image_modality(OBS_KEYS_TO_MODALITIES[remove_modality_prefix(k)])
         ]
 
-        self.teleoperate = False
-        if self.config.pretrained_policy_name_or_path is not None:
-            self.policy, policy_fps, self.device, self.use_amp = init_algo(
-                self.config.pretrained_policy_name_or_path,
+        self.teleoperate = True
+        if self.config.pretrained_algo_name_or_path is not None:
+            self.algo, algo_fps, self.device, self.use_amp = init_algo(
+                self.config.pretrained_algo_name_or_path,
                 self.config.algo_overrides
             )
+            self.algo.reset()
 
             if self.env.fps is None:
-                self.env.fps = policy_fps
-                logging.warning(f"No fps provided, so using the fps from policy config ({policy_fps}).")
-            elif self.env.fps != policy_fps:
+                self.env.fps = algo_fps
+                logging.warning(f"No fps provided, so using the fps from algo config ({algo_fps}).")
+            elif self.env.fps != algo_fps:
                 logging.warning(
-                    f"There is a mismatch between the provided fps ({self.env.fps}) and the one from policy config ({policy_fps})."
+                    f"There is a mismatch between the provided fps ({self.env.fps}) and the one from algo config ({algo_fps})."
                 )
-            self.teleoperate = True
+            self.teleoperate = False
 
     def run(self):
         """
@@ -71,7 +72,8 @@ class DemonstrationRecorder:
 
         Returns:
         """
-        self.init_dataset()
+        if self.config.store_dataset:
+            self.init_dataset()
 
         listener, events = init_keyboard_listener(self.config.use_foot_switch, self.config.play_sounds)
 
@@ -81,9 +83,12 @@ class DemonstrationRecorder:
 
             self.env.reset()
 
-            episode_index = self.dataset.num_episodes
-            log_say(f"Recording episode {episode_index + 1}", self.config.play_sounds, blocking=True)
-            self.await_gripper_closed(events)
+            if self.config.store_dataset:
+                episode_index = self.dataset.num_episodes
+                log_say(f"Recording episode {episode_index + 1}", self.config.play_sounds, blocking=True)
+
+            if self.teleoperate:
+                self.await_gripper_closed(events)
 
             if events["stop_recording"]:
                 self.env.toggle_torque(leader=True)
@@ -91,18 +96,21 @@ class DemonstrationRecorder:
                 break
 
             # recording loop
-            self.env.toggle_torque(leader=False)
+            if self.teleoperate:
+                self.env.toggle_torque(leader=False)
             self.record_episode(events)
 
             if events["rerecord_episode"]:
                 log_say("Re-record episode", self.config.play_sounds)
                 events["rerecord_episode"] = False
                 events["exit_early"] = False
-                self.dataset.clear_episode_buffer()  # to-do: fix this
+                if self.config.store_dataset:
+                    self.dataset.clear_episode_buffer()  # to-do: fix this
                 continue
 
             # Increment by one dataset["current_episode_index"]
-            self.dataset.save_episode(self.config.task)
+            if self.config.store_dataset:
+                self.dataset.save_episode(self.config.task)
 
             if events["stop_recording"]:
                 self.env.toggle_torque(leader=True)
@@ -111,12 +119,14 @@ class DemonstrationRecorder:
 
         self.env.close()
         log_say("Exiting, the dataset will be saved to disk", self.config.play_sounds, blocking=True)
-        self.dataset.consolidate(self.config.run_compute_stats)
 
-        if self.config.push_to_hub:
-            self.dataset.push_to_hub(tags=None)
+        if self.config.store_dataset:
+            self.dataset.consolidate(self.config.run_compute_stats)
 
-        return self.dataset
+            if self.config.push_to_hub:
+                self.dataset.push_to_hub(tags=None)
+
+            return self.dataset
 
     def await_gripper_closed(self, events: Dict) -> bool:
         # close gripper to start
@@ -140,9 +150,13 @@ class DemonstrationRecorder:
                     frame = self.env.teleop_step(record_data=True)
                 else:
                     observation = self.env.capture_observation()
-                    pred_action = predict_action(observation, self.policy, self.device, self.use_amp)
+                    pred_action = predict_action(observation, self.algo, self.device, self.use_amp)
+                    
+                    action = self.env.step(pred_action)
+                    frame = {**observation, 'action': action}
 
-                self.dataset.add_frame(frame)
+                if self.config.store_dataset:
+                    self.dataset.add_frame(frame)
 
                 timestamp = time.perf_counter() - start_episode_t
                 pbar.update(min([timestamp - pbar.n, self.config.episode_time_s - pbar.n]))
@@ -161,7 +175,7 @@ class DemonstrationRecorder:
             dataset = LeRobotDataset(
                 repo_id=self.config.dataset_repo_id,
                 root=self.config.root,
-                local_files_only=True
+                local_files_only=self.config.local_files_only
             )
             sanity_check_dataset_compatibility(
                 dataset,
@@ -209,3 +223,49 @@ class DemonstrationRecorder:
         for key in self.non_img_keys:
             features[key] = available_features[key]
         return features
+
+
+class DemonstrationReplay:
+    def __init__(
+        self,
+        env: ManipulatorEnv,
+        obs_keys: List[str],
+        config: DemonstrationRecorderConfig | None = None,
+        **kwargs):
+
+        if config is None:
+            config = DemonstrationRecorderConfig()
+
+        # Overwrite config arguments using kwargs
+        self.config = replace(config, **kwargs)
+        if self.config.task is None:
+            self.config.task = self.config.dataset_repo_id
+
+        self.env = env
+
+        self.dataset = LeRobotDataset(
+            self.config.dataset_repo_id,
+            root=self.config.root,
+            episodes=[0],
+            local_files_only=self.config.local_files_only
+        )
+        self.actions = self.dataset.hf_dataset.select_columns("action")
+
+    def run(self):
+        if not self.env.is_connected:
+            self.env.connect()
+
+        self.env.reset()
+
+        log_say("Replaying episode", self.config.play_sounds, blocking=True)
+
+        idx = 0
+        start_episode_t = time.perf_counter()
+        episode_t = self.dataset.num_frames / self.env.fps
+        with tqdm.tqdm(total=episode_t, colour='green') as pbar:
+            while idx < self.dataset.num_frames:
+                action = self.actions[idx]["action"]
+                self.env.send_action(action)
+                timestamp = time.perf_counter() - start_episode_t
+                pbar.update(round(min([timestamp - pbar.n, episode_t - pbar.n]), 2))
+                idx += 1

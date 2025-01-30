@@ -1,0 +1,23 @@
+# @package _global_
+defaults:
+  - /algo/act  # which contains default act parameterization and default encoder
+  - override /algo/encoder: act_default_encoder
+  - override /algo/optimizer: adamw
+  - _self_
+
+algo:
+  lr_backbone: 1e-5
+  n_obs_steps: 1
+  chunk_size: 100
+  n_action_steps: 100
+  grad_clip_norm: 10
+  use_amp: true
+
+  optimizer:
+    lr: 1e-5
+    weight_decay: 1e-4
+
+training:
+  batch_size: 8
+
+

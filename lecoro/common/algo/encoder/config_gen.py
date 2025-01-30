@@ -17,6 +17,7 @@ OBS_ACTIVATIONS = {}  # hardcoded
 OBS_RANDOMIZERS = {}
 
 DEFAULT_BACKBONES = {}
+DEFAULT_SHARE_BACKBONES = {}
 DEFAULT_DROPOUT = {}
 DEFAULT_POOLINGS = {}
 DEFAULT_NORMS = {}
@@ -43,7 +44,7 @@ def register_configs():
     global OBS_BACKBONES, OBS_PROJECTIONS, OBS_RANDOMIZERS, OBS_ACTIVATIONS, OBS_RANDOMIZERS
 
     # Build empty dictionary for each modality
-    from coro.common.utils.obs_utils import OBS_MODALITY_CLASSES  # this runs all modality definitions and registers their names
+    from lecoro.common.utils.obs_utils import OBS_MODALITY_CLASSES  # this runs all modality definitions and registers their names
     all_modalities = list(OBS_MODALITY_CLASSES.keys())
 
     for m in all_modalities:
@@ -98,7 +99,7 @@ def register_configs():
     }
 
     # Build named, instantiable, partial configurations from the stored classes with their respective arguments
-    from coro.common.utils.obs_utils import OBS_MODALITY_CLASSES
+    from lecoro.common.utils.obs_utils import OBS_MODALITY_CLASSES
     all_modalities = list(OBS_MODALITY_CLASSES.keys())
 
     backbone_configs = {}
@@ -210,6 +211,7 @@ class EncoderCoreConfig:
     randomizer: dict[str, Any] = field(default_factory=dict)
     normalization_stats: dict[str, list] | None = None
     normalization_mode: str = 'mean_std'
+    share_backbone: bool = False
 
     def __post_init__(self):
         if self.normalization_mode not in ('mean_std', 'min_max'):

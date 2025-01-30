@@ -1,10 +1,10 @@
 defaults:
   - dataset/key_formatter: remove_prefix
 
-offline_steps: 5
-batch_size: 4
-num_workers: 0
-device: cpu
+offline_steps: 140000
+batch_size: 8
+num_workers: 4
+device: cuda
 
 dataset:
   _target_: lecoro.common.datasets.lecoro_dataset.LeCoroDataset

@@ -3,8 +3,8 @@ from typing import Callable, Dict, List, Literal
 
 import torch
 from omegaconf import OmegaConf
-from lerobot.common.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata, MultiLeRobotDataset
-from lerobot.common.datasets.sampler import EpisodeAwareSampler
+from lecoro.common.datasets.lerobot_dataset import LeRobotDataset, LeRobotDatasetMetadata, MultiLeRobotDataset
+from lecoro.common.datasets.sampler import EpisodeAwareSampler
 from torch.utils.data import Dataset
 
 import lecoro.common.utils.obs_utils as ObsUtils
@@ -160,16 +160,20 @@ class LeCoroDataset(Dataset):
                 groups = self._key_to_groups[new_key]
 
                 if 'obs' in groups or 'subgoal' in groups:
-                    new_frame['obs'][new_key] = ObsUtils.process_obs(frame[key], obs_key=new_key)
+                    #new_frame['obs'][new_key] = ObsUtils.process_obs(frame[key], obs_key=new_key)
+                    new_frame['obs'][new_key] = frame[key]
 
                 if 'goal' in groups:
-                    new_frame['goal_obs'][new_key] = ObsUtils.process_obs(goal_frame[key], obs_key=new_key)
+                    #new_frame['goal_obs'][new_key] = ObsUtils.process_obs(goal_frame[key], obs_key=new_key)
+                    new_frame['goal_obs'][new_key] = goal_frame[key]
 
             elif self.obs_keys is not None and new_key in self.obs_keys:
-                new_frame[new_key] = ObsUtils.process_obs(frame[key], obs_key=new_key)
+                #new_frame[new_key] = ObsUtils.process_obs(frame[key], obs_key=new_key)
+                new_frame[new_key] = frame[key]
 
             elif new_key in self.dataset_keys:
-                new_frame[new_key] = ObsUtils.process_obs(frame[key], obs_key=new_key)
+                #new_frame[new_key] = ObsUtils.process_obs(frame[key], obs_key=new_key)
+                new_frame[new_key] = frame[key]
 
         return new_frame
 

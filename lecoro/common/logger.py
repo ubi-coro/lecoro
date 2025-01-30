@@ -26,15 +26,14 @@ from pathlib import Path
 
 import torch
 from huggingface_hub.constants import SAFETENSORS_SINGLE_FILE
-from lerobot.common.policies.policy_protocol import Policy
-from lerobot.common.utils.utils import get_global_random_state, set_global_random_state
+from lecoro.common.algo.algo_protocol import Algo
+from lecoro.common.utils.utils import get_global_random_state, set_global_random_state
 from omegaconf import DictConfig, OmegaConf
 from termcolor import colored
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LRScheduler
 
-from coro.common.algo.algo import Algo
-from coro.common.config_gen import Config
+from lecoro.common.config_gen import Config
 
 
 
@@ -213,7 +212,7 @@ class Logger:
         Given the last checkpoint in the logging directory, load the optimizer state, scheduler state, and
         random state, and return the global training step.
         """
-        train_state = torch.load(self.last_checkpoint_dir / self.training_state_file_name)
+        train_state = torch.load(self.last_checkpoint_dir / self.training_state_file_name, map_location='cpu')
         algo.load_train_state(train_state)
         # Small hack to get the expected keys: use `get_global_random_state`.
         set_global_random_state({k: train_state[k] for k in get_global_random_state()})

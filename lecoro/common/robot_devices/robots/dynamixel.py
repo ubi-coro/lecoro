@@ -5,6 +5,7 @@ from lecoro.common.robot_devices.motors.dynamixel import (
     DynamixelMotorsBus,
     CalibrationMode,
     TorqueMode,
+    DYNAMIXEL_OPERATION_MODE,
     INTERBOTIX_MOTORMODELS
 )
 from lecoro.common.robot_devices.robots.dynamixel_calibration import convert_degrees_to_steps, compute_nearest_rounded_position, apply_drive_mode
@@ -28,10 +29,66 @@ def require_connection(method):
     return wrapper
 
 
-class _BaseDynamixelActuator(ABC):
-    def __init__(self):
-        # interface for managing lerobots Dynamixel Bus and
-        pass
+class DynamixelActuator:
+    def __init__(self, port, motors, mock=False, moving_time=2.0, accel_time=0.3):
+        self.bus = DynamixelMotorsBus(port, motors, mock)
+        self.moving_time = moving_time
+        self.accel_time = accel_time
+
+    @require_connection
+    def set_presets(self, robot_type):
+        # dynamixel servos handle shadows automatically
+        if "shoulder_shadow" in self.joint_names:
+            shoulder_idx = self.bus.read("ID", "shoulder")
+            self.bus.write("Secondary_ID", shoulder_idx, "shoulder_shadow")
+
+        if "elbow_shadow" in self.joint_names:
+            elbow_idx = self.bus.read("ID", "elbow")
+            self.bus.write("Secondary_ID", elbow_idx, "elbow_shadow")
+
+        # set the drive mode to time-based profile to set moving time via velocity profiles
+        drive_mode = self.bus.read('Drive_Mode')
+        for i in range(len(self.joint_names)):
+            drive_mode[i] |= 1 << 2  # set third bit to enable time-based profiles
+        self.bus.write('Drive_Mode', drive_mode)
+
+        if robot_type == 'follower':
+            self.bus.write("Velocity_Limit", 131)
+
+        all_joints_except_gripper = [name for name in self.joint_names if name != "gripper"]
+        if len(all_joints_except_gripper) > 0:
+            # 4 corresponds to Extended Position on Aloha motors
+            self.set_op_mode('extended_position', joint_names=all_joints_except_gripper)
+
+        # Use 'position control current based' for follower gripper to be limited by the limit of the current.
+        # It can grasp an object without forcing too much even tho,
+        # it's goal position is a complete grasp (both gripper fingers are ordered to join and reach a touch).
+        # 5 corresponds to Current Controlled Position on Aloha gripper follower "xm430-w350"
+        if robot_type == 'follower' and 'gripper' in self.joint_names and self.bus.motors['gripper'][1] != 'xc430-w150':
+            self.set_op_mode('current_based_position', joint_names=['gripper'])
+            #self.bus.write('Current_Limit', motor_names=['gripper'], values=[500.0])
+
+        # set profiles after setting operation modes
+        self.set_trajectory_time(moving_time=self.moving_time, accel_time=self.accel_time)
+
+    @property
+    def joint_names(self):
+        return self.bus.motor_names
+
+    @property
+    def motor_models(self):
+        return self.bus.motor_models
+
+    @property
+    def is_connected(self):
+        return self.bus.is_connected
+
+    def connect(self):
+        self.bus.connect()
+
+    @require_connection
+    def disconnect(self):
+        self.bus.disconnect()
 
     def run_arm_calibration(self, robot_type, arm_name, arm_type):
         # arm_type must be in {"follower", "leader"}
@@ -121,148 +178,6 @@ class _BaseDynamixelActuator(ABC):
             "motor_names": self.joint_names,
         }
         return calib_data
-
-    def set_presets(self, arm_type):
-        pass
-
-    @property
-    @abstractmethod
-    def joint_names(self):
-        pass
-
-    @property
-    @abstractmethod
-    def motor_models(self):
-        pass
-
-    @property
-    @abstractmethod
-    def is_connected(self):
-        pass
-
-    @abstractmethod
-    def connect(self):
-        pass
-
-    @abstractmethod
-    def disconnect(self):
-        pass
-
-    @abstractmethod
-    def set_calibration(self, calibration):
-        pass
-
-    @abstractmethod
-    def apply_calibration(self, values, joint_names):
-        pass
-
-    @abstractmethod
-    def revert_calibration(self, values, joint_names):
-        # same wrapper as DynamixelBus (maybe just for gripper?)
-        # maybe even same file?
-        pass
-
-    @abstractmethod
-    def get_joint_positions(self, apply_calibration=True):
-        pass
-
-    @abstractmethod
-    def get_single_joint_position(self, joint_name, apply_calibration=True):
-        pass
-
-    @abstractmethod
-    def set_joint_positions(self, joint_positions, moving_time=None, accel_time=None, apply_calibration=True, blocking=True):
-        pass
-
-    @abstractmethod
-    def set_single_joint_position(self, joint_name, position, moving_time=None, accel_time=None, apply_calibration=True, blocking=True):
-        pass
-
-    @abstractmethod
-    def set_trajectory_time(self, moving_time=None, accel_time=None):
-        pass
-
-    @abstractmethod
-    def set_op_mode(self, op_mode, joint_names=None):
-        pass
-
-    @abstractmethod
-    def set_pid_gains(self, p_gain=None, i_gain=None, d_gain=None, joint_names=None):
-        pass
-
-    @abstractmethod
-    def torque_on(self, joint_names=None):
-        pass
-
-    @abstractmethod
-    def torque_off(self, joint_names=None):
-        pass
-
-    @abstractmethod
-    def read_register(self, register_name, joint_names=None):
-        pass
-
-
-class DynamixelActuator(_BaseDynamixelActuator):
-    def __init__(self, port, motors, mock=False, moving_time=2.0, accel_time=0.3):
-        self.bus = DynamixelMotorsBus(port, motors, mock)
-        self.moving_time = moving_time
-        self.accel_time = accel_time
-
-    @require_connection
-    def set_presets(self, robot_type):
-        # dynamixel servos handle shadows automatically
-        if "shoulder_shadow" in self.joint_names:
-            shoulder_idx = self.bus.read("ID", "shoulder")
-            self.bus.write("Secondary_ID", shoulder_idx, "shoulder_shadow")
-
-        if "elbow_shadow" in self.joint_names:
-            elbow_idx = self.bus.read("ID", "elbow")
-            self.bus.write("Secondary_ID", elbow_idx, "elbow_shadow")
-
-        # set the drive mode to time-based profile to set moving time via velocity profiles
-        drive_mode = self.bus.read('Drive_Mode')
-        for i in range(len(self.joint_names)):
-            drive_mode[i] |= 1 << 2  # set third bit to enable time-based profiles
-        self.bus.write('Drive_Mode', drive_mode)
-
-        if robot_type == 'follower':
-            self.bus.write("Velocity_Limit", 131)
-
-        all_joints_except_gripper = [name for name in self.joint_names if name != "gripper"]
-        if len(all_joints_except_gripper) > 0:
-            # 4 corresponds to Extended Position on Aloha motors
-            self.set_op_mode('extended_position', joint_names=all_joints_except_gripper)
-
-        # Use 'position control current based' for follower gripper to be limited by the limit of the current.
-        # It can grasp an object without forcing too much even tho,
-        # it's goal position is a complete grasp (both gripper fingers are ordered to join and reach a touch).
-        # 5 corresponds to Current Controlled Position on Aloha gripper follower "xm430-w350"
-        if robot_type == 'follower' and 'gripper' in self.joint_names and self.bus.motors['gripper'][1] != 'xc430-w150':
-            self.set_op_mode('current_based_position', joint_names=['gripper'])
-            #self.bus.write('Current_Limit', motor_names=['gripper'], values=[500.0])
-
-        # set profiles after setting operation modes
-        self.set_trajectory_time(moving_time=self.moving_time, accel_time=self.accel_time)
-
-    @property
-    def joint_names(self):
-        return self.bus.motor_names
-
-    @property
-    def motor_models(self):
-        return self.bus.motor_models
-
-    @property
-    def is_connected(self):
-        return self.bus.is_connected
-
-    def connect(self):
-        self.bus.connect()
-
-    @require_connection
-    def disconnect(self):
-        self.bus.disconnect()
 
     def set_calibration(self, calibration):
         self.bus.set_calibration(calibration)
@@ -392,7 +307,7 @@ class DynamixelActuator(_BaseDynamixelActuator):
         return self.bus.read(register_name, joint_names)
 
 
-class InterbotixActuator(_BaseDynamixelActuator):
+class InterbotixActuator(DynamixelActuator):
     ARM_GROUP = set(['waist', 'shoulder', 'elbow', 'forearm_roll', 'wrist_angle', 'wrist_rotate'])
     def __init__(self,
                  robot_name,

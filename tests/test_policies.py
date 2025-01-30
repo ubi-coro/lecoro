@@ -37,7 +37,7 @@ from lecoro.common.algo.factory import (
 from lecoro.common.algo.normalize import Normalize, Unnormalize
 from lecoro.common.algo.algo_protocol import Policy
 from lecoro.common.utils.utils import init_hydra_config, seeded_context
-from lecoro.scripts.train import make_optimizer_and_scheduler
+from lecoro.scripts._deprecated.train import make_optimizer_and_scheduler
 from tests.scripts.save_policy_to_safetensors import get_policy_stats
 from tests.utils import DEFAULT_CONFIG_PATH, DEVICE, require_cpu, require_env, require_x86_64_kernel
 

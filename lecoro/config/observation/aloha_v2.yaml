@@ -1,8 +1,6 @@
 modalities:
   obs:
     low_dim: [ qpos ]
-    rgb: [ cam_low, cam_left_wrist ]
-    depth: [ depth_low, depth_left_wrist ]
-
+    rgb: [ cam_low, cam_left_wrist, cam_right_wrist, cam_high ]
 
 
