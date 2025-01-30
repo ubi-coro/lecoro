@@ -436,9 +436,7 @@ class LeRobotPolicy(PolicyAlgo, ABC):
         return train_state
 
     def load_train_state(self, train_state):
-        from copy import copy
-        self.optimizer2 = copy(self.optimizer)
-        self.optimizer2.load_state_dict(train_state["optimizer"])
+        self.optimizer.load_state_dict(train_state["optimizer"])
         if self.lr_scheduler is not None:
             self.optimizer.load_state_dict(train_state["lr_scheduler"])
         elif "lr_scheduler" in train_state:
